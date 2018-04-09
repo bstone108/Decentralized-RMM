@@ -1,0 +1,149 @@
+
+»+
+ProtocolDef.proto#Rhino.DistributedHashTable.Protocol"š
+Value
+Key (	
+TimeStampAsDouble (B
+Version (21.Rhino.DistributedHashTable.Protocol.ValueVersion
+ReadOnly (
+Data (
+
+Sha256Hash (I
+ParentVersions (21.Rhino.DistributedHashTable.Protocol.ValueVersion
+ExpiresAtAsDouble
+ (
+Tag ("+
+NodeEndpoint
+Sync (	
+Async (	"2
+ValueVersion
+Number (
+
+InstanceId ("Ì
+Segment
+Index (K
+AssignedEndpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpointV
+InProcessOfMovingToEndpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpointI
+PendingBackups (21.Rhino.DistributedHashTable.Protocol.NodeEndpointB
+Backups (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint"`
+JoinRequestMessageJ
+EndpointJoining (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint"U
+JoinResponseMessage>
+Segments (2,.Rhino.DistributedHashTable.Protocol.Segment"ƒ
+TopologyResultMessage
+TimestampAsDouble (
+Version (>
+Segments (2,.Rhino.DistributedHashTable.Protocol.Segment"»
+CaughtUpRequestMessageC
+Endpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint
+CaughtUpSegments (B
+Type (24.Rhino.DistributedHashTable.Protocol.ReplicationType"·
+GaveUpRequestMessageC
+Endpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint
+GaveUpSegments (B
+Type (24.Rhino.DistributedHashTable.Protocol.ReplicationType"}
+GetRequestMessage
+Key (	
+Segment (J
+SpecificVersion (21.Rhino.DistributedHashTable.Protocol.ValueVersion"P
+GetResponseMessage:
+Values (2*.Rhino.DistributedHashTable.Protocol.Value"ž
+RemoveRequestMessage
+Key (	
+Segment (
+IsReplicationRequest (J
+SpecificVersion (21.Rhino.DistributedHashTable.Protocol.ValueVersion"ù
+PutRequestMessage
+Key (	
+Segment (I
+ParentVersions (21.Rhino.DistributedHashTable.Protocol.ValueVersion
+OptimisticConcurrency (
+
+IsReadOnly (
+Bytes (
+IsReplicationRequest (M
+ReplicationVersion (21.Rhino.DistributedHashTable.Protocol.ValueVersion
+ExpiresAtAsDouble ($
+ReplicationTimeStampAsDouble	 (
+Tag
+ ("p
+PutResponseMessageB
+Version (21.Rhino.DistributedHashTable.Protocol.ValueVersion
+ConflictExists ("+
+RemoveResponseMessage
+
+WasRemoved ("
+ErrorMessage
+Message (	"Ì
+$AssignAllEmptySegmentsRequestMessageN
+ReplicationEndpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint
+Segments (B
+Type (24.Rhino.DistributedHashTable.Protocol.ReplicationType"A
+%AssignAllEmptySegmentsResponseMessage
+AssignedSegments ("Æ
+ReplicateNextPageRequestMessageN
+ReplicationEndpoint (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint
+Segment (B
+Type (24.Rhino.DistributedHashTable.Protocol.ReplicationType"Ð
+ ReplicateNextPageResponseMessage
+Done (Q
+RemoveRequests (29.Rhino.DistributedHashTable.Protocol.RemoveRequestMessageK
+PutRequests (26.Rhino.DistributedHashTable.Protocol.PutRequestMessage"X
+SeeOtherErrorMessage@
+Other (21.Rhino.DistributedHashTable.Protocol.NodeEndpoint"¦
+MasterMessageUnionD
+Type (26.Rhino.DistributedHashTable.Protocol.MasterMessageTypeL
+JoinRequest (27.Rhino.DistributedHashTable.Protocol.JoinRequestMessageN
+JoinResponse (28.Rhino.DistributedHashTable.Protocol.JoinResponseMessageL
+Topology (2:.Rhino.DistributedHashTable.Protocol.TopologyResultMessageD
+	Exception (21.Rhino.DistributedHashTable.Protocol.ErrorMessageM
+CaughtUp (2;.Rhino.DistributedHashTable.Protocol.CaughtUpRequestMessageI
+GaveUp (29.Rhino.DistributedHashTable.Protocol.GaveUpRequestMessage"¤	
+StorageMessageUnionE
+Type (27.Rhino.DistributedHashTable.Protocol.StorageMessageType
+TopologyVersion (K
+GetRequests (26.Rhino.DistributedHashTable.Protocol.GetRequestMessageK
+PutRequests (26.Rhino.DistributedHashTable.Protocol.PutRequestMessageM
+PutResponses (27.Rhino.DistributedHashTable.Protocol.PutResponseMessageQ
+RemoveRequests (29.Rhino.DistributedHashTable.Protocol.RemoveRequestMessageR
+RemoveRespones (2:.Rhino.DistributedHashTable.Protocol.RemoveResponseMessageM
+GetResponses (27.Rhino.DistributedHashTable.Protocol.GetResponseMessageD
+	Exception	 (21.Rhino.DistributedHashTable.Protocol.ErrorMessagep
+AssignAllEmptySegmentsRequest
+ (2I.Rhino.DistributedHashTable.Protocol.AssignAllEmptySegmentsRequestMessager
+AssignAllEmptySegmentsResponse (2J.Rhino.DistributedHashTable.Protocol.AssignAllEmptySegmentsResponseMessagef
+ReplicateNextPageRequest (2D.Rhino.DistributedHashTable.Protocol.ReplicateNextPageRequestMessageh
+ReplicateNextPageResponse (2E.Rhino.DistributedHashTable.Protocol.ReplicateNextPageResponseMessageP
+SeeOtherError (29.Rhino.DistributedHashTable.Protocol.SeeOtherErrorMessage*õ
+StorageMessageType
+GetRequests
+PutRequests
+RemoveRequests
+GetResponses
+PutResponses
+RemoveResponses
+StorageErrorResult!
+AssignAllEmptySegmentsRequest"
+AssignAllEmptySegmentsResponse	
+ReplicateNextPageRequest
+
+ReplicateNextPageResponse
+SeeOtherError
+TopologyChangedError
+UpdateTopology
+TopologyUpdated*Ì
+MasterMessageType
+GetTopologyRequest
+GetTopologyResult
+JoinRequest
+
+JoinResult
+MasterErrorResult
+CaughtUpRequest
+CaughtUpResponse
+GaveUpRequest
+GaveUpResponse	*,
+ReplicationType
+	Ownership
+
+BackupBH
