@@ -32,6 +32,14 @@ CGO_ENABLED=0 go test ./internal/spike ./internal/store -count=1 -v
 CGO_ENABLED=0 go test ./internal/node -run TestTwoNodeAuthenticatedIntentAck -count=1 -v
 ```
 
+Local evidence on this agent host (2026-08-31):
+
+- `CGO_ENABLED=0 go test ./...` — pass after docs-contract phrase fix
+- Badger spike: linux/amd64, go1.22.2, 1000 intent records open/put/reopen in 113ms, export 105025 bytes, quarantine-on-corrupt MANIFEST pass, SQLite fallback not selected
+- `TestTwoNodeAuthenticatedIntentAck` — pass: trusted inventory intent queued→acknowledged, durable across Badger reopen, untrusted dial refused, command.run fail-closed, remote unattended upgrade requires ephemeral admin proof that is absent from both stores
+- `rmm host-info` on this host: Ubuntu 24.04, kernel 6.12, displayServer=x11
+- Local `govulncheck` on go1.22.2 reports stdlib CVEs fixed in later Go patch/minor releases plus a Badger-transitive glog issue; glog was bumped to v1.2.4. CI security job scans with current stable Go.
+
 ## Not done (next ordered work)
 
 1. OS-backed remote-desktop capture (X11, Wayland portal, Windows GCDP, macOS

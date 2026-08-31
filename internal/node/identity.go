@@ -1,9 +1,6 @@
 package node
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
 	"github.com/bstone108/Decentralized-RMM/internal/store"
 )
@@ -43,16 +40,4 @@ func SaveIdentity(st store.Store, id identity.Private) error {
 		BoxPublicKey: id.Public.BoxKeyBase64,
 		NodeID:       id.Public.NodeID,
 	})
-}
-
-func MustNodeID(id identity.Private) string {
-	if id.Public.NodeID == "" {
-		return fmt.Sprintf("invalid")
-	}
-	return id.Public.NodeID
-}
-
-func marshal(v any) []byte {
-	b, _ := json.Marshal(v)
-	return b
 }

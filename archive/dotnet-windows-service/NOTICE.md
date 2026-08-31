@@ -1,6 +1,6 @@
 # Abandoned reference: Windows Service / .NET Framework skeleton
 
-This directory is **not** part of the product. It is preserved only so history
+This directory is not part of the product. It is preserved only so history
 of the original 2018-era repository is not silently deleted.
 
 Abandoned with it:

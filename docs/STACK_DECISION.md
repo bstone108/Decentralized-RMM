@@ -90,10 +90,13 @@ It must show, on this host, with `CGO_ENABLED=0`:
 Fill in measured results after the spike run:
 
 ```
-host: (filled by spike)
-go: (filled by spike)
+host: linux/amd64 (Ubuntu 24.04, go1.22.2)
+go: go1.22.2
 CGO_ENABLED: 0
-badger open+1000 put+reopen: (filled by spike)
-result: (filled by spike)
+badger open+1000 put+reopen: 113ms
+export size: 105025 bytes
+validation: pass (rejects fse/v1/ keys and password fields)
+quarantine on corrupt MANIFEST: pass
+result: Badger selected; no material compatibility/reliability trouble on this host
 sqlite fallback triggered: no
 ```

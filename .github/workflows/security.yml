@@ -17,9 +17,11 @@ jobs:
       CGO_ENABLED: "0"
     steps:
       - uses: actions/checkout@v4
+      # Scan with current stable Go so stdlib findings are not frozen to the
+      # 1.22 language floor used for local/agent builds.
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: "stable"
           cache: true
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest

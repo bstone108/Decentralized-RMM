@@ -61,7 +61,8 @@ Upgrade to `unattended`:
    never the password).
 5. If the verifier reports that no usable admin password exists, refuse unless
    `localAccess: true` (the caller is the already-elevated local installer /
-   console on the same host). Remote callers cannot set `localAccess`.
+   console on the same host). Remote callers cannot set `localAccess`. If no
+   usable admin password exists, require direct local access.
 
 ## Linux display servers
 
