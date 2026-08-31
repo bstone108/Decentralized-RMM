@@ -11,6 +11,7 @@ spike:
 
 proof:
 	go test -count=1 -v ./internal/node -run TestTwoNodeAuthenticatedIntentAck
+	go test -count=1 -v ./internal/consolegui ./internal/consolemesh
 
 vet:
 	go vet ./...

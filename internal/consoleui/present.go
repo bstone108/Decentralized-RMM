@@ -10,7 +10,8 @@ import (
 )
 
 // Presenter shows enrollment/update policy in a native operator surface.
-// The product console is not a TUI and not a mandatory web console.
+// The product console is the native GUI in internal/consolegui; this package
+// is POLICY visibility only. It is not a TUI and not a mandatory web console.
 type Presenter interface {
 	ShowPolicy(title, body string) error
 }

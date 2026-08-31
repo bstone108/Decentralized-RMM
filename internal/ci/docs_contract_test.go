@@ -16,6 +16,7 @@ func TestDocsContracts(t *testing.T) {
 			"interop/mgmt/v1/",
 			"Discovery",
 			"Badger",
+			"native GUI",
 		},
 		"docs/THREAT_MODEL.md": {
 			"Discovery grants nothing",
@@ -46,6 +47,9 @@ func TestDocsContracts(t *testing.T) {
 			"BadgerDB",
 			"Windows 10",
 			"CGO_ENABLED=0",
+			"Win32",
+			"X11",
+			"Aqua",
 		},
 		"docs/ENROLLMENT.md": {
 			"identity-signed",
@@ -66,12 +70,19 @@ func TestDocsContracts(t *testing.T) {
 			"local authenticated connection",
 			"built-in authenticated mesh",
 			"not a terminal/TUI",
+			"native GUI",
+			"management-intent",
 		},
 		"docs/SELF_UPDATE.md": {
 			"independently",
 			"cannot introduce untrusted",
 			"OS-native",
 			"foreign OS",
+		},
+		"docs/CHECKPOINT.md": {
+			"native GUI",
+			"management-intent",
+			"CGO_ENABLED=0",
 		},
 	}
 	for rel, needles := range mustContain {

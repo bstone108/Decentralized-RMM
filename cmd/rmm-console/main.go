@@ -6,10 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
 	"github.com/bstone108/Decentralized-RMM/internal/appboot"
+	"github.com/bstone108/Decentralized-RMM/internal/consolegui"
 	"github.com/bstone108/Decentralized-RMM/internal/consolemesh"
 	"github.com/bstone108/Decentralized-RMM/internal/consoleui"
 	"github.com/bstone108/Decentralized-RMM/internal/enroll"
@@ -97,9 +99,26 @@ func main() {
 		if err != nil {
 			appboot.Fatal(err)
 		}
-		fmt.Printf("console %s mesh mode=%s local=%s builtin=%s\n", n.ID.Public.NodeID, rt.Mode, rt.LocalAddr, rt.MeshAddr)
+		policy := ""
+		if b, rerr := os.ReadFile(enroll.PolicyFile(*data)); rerr == nil {
+			policy = string(b)
+		}
+		sess := consolegui.NewSession(rt, policy)
+		app := consolegui.NewApp(sess, consolegui.Native())
+		app.StateDir = *data
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt)
+			<-c
+			cancel()
+		}()
+		fmt.Printf("console %s mesh mode=%s local=%s builtin=%s native GUI=%s\n", n.ID.Public.NodeID, rt.Mode, rt.LocalAddr, rt.MeshAddr, app.Backend.Name())
 		fmt.Println("console has no endpoint-management agent function")
-		select {}
+		if err := app.Run(ctx); err != nil {
+			appboot.Fatal(fmt.Errorf("native GUI console required (not a TUI or web console): %w", err))
+		}
 	case "policy":
 		fs := flag.NewFlagSet("policy", flag.ExitOnError)
 		file := fs.String("manifest", "", "enrollment.manifest.json")
@@ -208,15 +227,17 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `rmm-console %s — operator console (mesh peer, not an agent)
+	fmt.Fprintf(os.Stderr, `rmm-console %s — operator console (native GUI mesh peer, not an agent)
 
-Separately deployable from rmm-agent. Native on Windows/Linux/macOS.
-If a trusted platform agent is on this computer, GUI/CLI prefers that local
-authenticated connection and reuses the agent's mesh presence; otherwise the
-console starts its own built-in authenticated mesh.
+Separately deployable from rmm-agent. Native GUI on Windows (Win32), Linux (X11),
+and macOS (Aqua), compiled with CGO_ENABLED=0. If a trusted platform agent is on
+this computer, the GUI prefers that local authenticated connection and reuses
+the agent's mesh presence; otherwise the console starts its own built-in
+authenticated mesh.
 
 This process has no endpoint-management agent function, no TUI, and is not a
-mandatory web console.
+mandatory web console. "run" is the native GUI. "policy" / "intent" remain
+auxiliary CLI for enrollment visibility and scripted delivery.
 
 Commands:
   version

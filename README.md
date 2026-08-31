@@ -19,7 +19,8 @@ are separate native programs.
 - Cross-platform stack decision evidenced by a BadgerDB spike (`docs/STACK_DECISION.md`)
 - Authenticated two-node durable `ManagementIntent` lifecycle with ack
 - Identity-signed enrollment manifests and platform-native installer trees
-- Console local-agent mesh reuse vs built-in mesh
+- Console local-agent mesh reuse vs built-in mesh, with a native GUI that
+  shows authenticated mesh status and authorizes management intents
 - Signed artifact cache/exchange (including other OS/arch) with independent verify
 - Namespaced local store (`rmm/v1/*`) plus a separate signed/encrypted interop schema
 
@@ -35,13 +36,13 @@ go test -count=1 ./internal/node -run TestTwoNodeAuthenticatedIntentAck -v
 | Binary | Role |
 | --- | --- |
 | `rmm-agent` | Platform agent (endpoint management). No operator GUI. |
-| `rmm-console` | Operator console / mesh peer. No agent function. No TUI/web console. |
+| `rmm-console` | Native GUI operator console / mesh peer. No agent function. No TUI/web console. |
 | `rmm-pack` | Corporate/mass identity-provisioned installer builder |
 | `rmm` | `host-info` helper only |
 
-When a trusted platform agent runs on the same computer, the console prefers a
-local authenticated connection and reuses that agent's mesh; otherwise it starts
-its own built-in authenticated mesh.
+When a trusted platform agent runs on the same computer, the native GUI prefers
+a local authenticated connection and reuses that agent's mesh; otherwise it
+starts its own built-in authenticated mesh.
 
 Installation of the agent asks whether Remote Desktop is **unattended** or
 **authorization required every session** (also as a signed enrollment flag).

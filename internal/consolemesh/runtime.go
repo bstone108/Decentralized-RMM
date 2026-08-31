@@ -16,10 +16,11 @@ const (
 )
 
 type Runtime struct {
-	Node      *node.Node
-	Mode      Mode
-	MeshAddr  string
-	LocalAddr string
+	Node        *node.Node
+	Mode        Mode
+	MeshAddr    string
+	LocalAddr   string
+	LocalNodeID string
 }
 
 func Start(n *node.Node, dataDir, listenAddr string) (*Runtime, error) {
@@ -34,7 +35,7 @@ func Start(n *node.Node, dataDir, listenAddr string) (*Runtime, error) {
 		peer, perr := n.Trust.Require(adv.NodeID)
 		if perr == nil && peer.PublicKey == adv.PublicKey && adv.Role == "agent" {
 			if _, err := identity.ParsePublicWithBox(adv.PublicKey, adv.BoxPublicKey); err == nil {
-				return &Runtime{Node: n, Mode: ModeViaLocalAgent, LocalAddr: adv.ListenAddr}, nil
+				return &Runtime{Node: n, Mode: ModeViaLocalAgent, LocalAddr: adv.ListenAddr, LocalNodeID: adv.NodeID}, nil
 			}
 		}
 	}
@@ -43,4 +44,18 @@ func Start(n *node.Node, dataDir, listenAddr string) (*Runtime, error) {
 		return nil, err
 	}
 	return &Runtime{Node: n, Mode: ModeBuiltin, MeshAddr: bound}, nil
+}
+
+func (r *Runtime) PrefersLocalAgent() bool {
+	return r != nil && r.Mode == ModeViaLocalAgent && r.LocalAddr != ""
+}
+
+func (r *Runtime) DialAddr() string {
+	if r.PrefersLocalAgent() {
+		return r.LocalAddr
+	}
+	if r != nil {
+		return r.MeshAddr
+	}
+	return ""
 }

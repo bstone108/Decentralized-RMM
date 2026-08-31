@@ -8,7 +8,7 @@ Status: **binding** for corporate/mass distribution.
 | --- | --- |
 | `rmm-pack` | Builds platform-native identity-provisioned installer trees |
 | `rmm-agent` | Platform agent: endpoint management, mesh listen, local presence advert |
-| `rmm-console` | Operator console / authenticated mesh peer; **no agent function** |
+| `rmm-console` | Native GUI operator console / authenticated mesh peer; **no agent function** |
 | `rmm` | Host-info helper only (not a dual-role process) |
 
 Dual-role `rmm --role dual` is withdrawn.

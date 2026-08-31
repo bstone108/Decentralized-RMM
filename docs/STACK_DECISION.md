@@ -71,10 +71,22 @@ keyspaces must never be mixed in one database file.
 libp2p/DHT is deferred. Discovery seams exist so those routes can be added
 without granting trust.
 
-## GUI later
+## Native GUI (CGO-free)
 
-Native GUI (Wails or OS toolkits) is **not** this milestone. The CLI and agent
-are the native control plane. A web UI must not become the only operator path.
+The product console is a native GUI, not a TUI and not a mandatory web console.
+Toolkit choice is constrained by `CGO_ENABLED=0` and Linux-hosted
+cross-compilation of `rmm-console` for Windows, Linux, and macOS:
+
+| OS | Adapter | Why |
+| --- | --- | --- |
+| Windows | Win32 `MessageBoxW` (user32) | Real GUI; no CGO; compiles from Linux |
+| Linux | X11 window + zenity/kdialog dialogs | Real GUI; Wayland-only is documented as needing X11/`DISPLAY` |
+| macOS | Aqua via `osascript` | Real GUI; no CGO; compiles from Linux |
+
+Wails, Fyne, and Gio are not used: they require CGO and/or cannot cross-compile
+darwin/windows GUI from Linux CI. `internal/consoleui` stays a POLICY.txt
+presenter; `internal/consolegui` is the GUI control plane (mesh status +
+management-intent authorization).
 
 ## Spike evidence
 
