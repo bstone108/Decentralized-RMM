@@ -39,6 +39,7 @@ Local evidence on this agent host (2026-08-31):
 - `TestTwoNodeAuthenticatedIntentAck` — pass: trusted inventory intent queued→acknowledged, durable across Badger reopen, untrusted dial refused, command.run fail-closed, remote unattended upgrade requires ephemeral admin proof that is absent from both stores
 - `rmm host-info` on this host: Ubuntu 24.04, kernel 6.12, displayServer=x11
 - Local `govulncheck` on go1.22.2 reports stdlib CVEs fixed in later Go patch/minor releases plus a Badger-transitive glog issue; glog was bumped to v1.2.4. CI security job scans with current stable Go.
+- GitHub on `251b833`: Go tests, six-platform cross-compile, CodeQL Analyze Go, and govulncheck all succeeded. Follow-up commit adds redacted durable audit events plus `rmm listen` / `rmm intent`.
 
 ## Not done (next ordered work)
 
