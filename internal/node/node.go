@@ -179,6 +179,7 @@ func (n *Node) Deliver(sess *mesh.Session, id string) (intent.Receipt, error) {
 	if err := intent.SaveReceipt(n.Store, ack); err != nil {
 		return intent.Receipt{}, err
 	}
+	n.audit(in, ack.Summary)
 	return ack, nil
 }
 
@@ -237,6 +238,7 @@ func (n *Node) HandleIntent(in intent.Intent) (intent.Intent, intent.Receipt, er
 		_ = intent.Save(n.Store, in)
 		rec := in.Receipt("validation failed", nil)
 		_ = intent.SaveReceipt(n.Store, rec)
+		n.audit(in, rec.Summary)
 		return in, rec, nil
 	}
 	if err := in.Transition(intent.Validated, ""); err != nil {
@@ -254,6 +256,7 @@ func (n *Node) HandleIntent(in intent.Intent) (intent.Intent, intent.Receipt, er
 		_ = intent.Save(n.Store, in)
 		rec := in.Receipt(summary, nil)
 		_ = intent.SaveReceipt(n.Store, rec)
+		n.audit(in, rec.Summary)
 		return in, rec, nil
 	}
 	if err := in.Transition(intent.Succeeded, ""); err != nil {
@@ -264,7 +267,20 @@ func (n *Node) HandleIntent(in intent.Intent) (intent.Intent, intent.Receipt, er
 	}
 	rec := in.Receipt(summary, result)
 	_ = intent.SaveReceipt(n.Store, rec)
+	n.audit(in, rec.Summary)
 	return in, rec, nil
+}
+
+func (n *Node) audit(in intent.Intent, summary string) {
+	_ = intent.AppendAudit(n.Store, intent.AuditEvent{
+		IntentID:     in.ID,
+		Kind:         in.Kind,
+		Status:       in.Status,
+		ActorNodeID:  n.ID.Public.NodeID,
+		TargetNodeID: in.TargetNodeID,
+		Summary:      summary,
+		LastError:    in.LastError,
+	})
 }
 
 func extractElevation(in *intent.Intent) *desktop.ElevationProof {

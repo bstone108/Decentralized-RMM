@@ -205,6 +205,15 @@ func TestTwoNodeAuthenticatedIntentAck(t *testing.T) {
 	if err := store.Validate(agentStore); err != nil {
 		t.Fatal(err)
 	}
+	events, err := intent.ListAudit(agentStore)
+	if err != nil || len(events) == 0 {
+		t.Fatalf("expected durable audit history, got %d %v", len(events), err)
+	}
+	for _, e := range events {
+		if security.ContainsSecret([]byte(e.Summary+e.LastError), secret) {
+			t.Fatal("password leaked into audit")
+		}
+	}
 	pol, err := desktop.LoadPolicy(agentStore)
 	if err != nil || pol.Mode != desktop.ModeUnattended {
 		t.Fatalf("policy %+v %v", pol, err)
