@@ -12,6 +12,8 @@ the shortcut is a bug.
 - Remote-desktop pixel/input streams (later) and authorization mode (now)
 - Operator-supplied admin/root passwords used only as ephemeral elevation proofs
 - Local Badger data at rest
+- Enrollment tokens and issuer-signed installer policy
+- Publisher-signed self-update artifacts
 
 ## Adversaries
 
@@ -21,6 +23,8 @@ the shortcut is a bug.
 - Local unprivileged user on a managed endpoint
 - Malicious or buggy replica attempting to merge another product's store files
 - Operator mistake (sending a password in a ticket, log, or backup comment)
+- Malicious mesh peer offering a self-signed "update"
+- Stolen installer tree reused after revocation or expiry
 
 ## Trust boundaries
 
@@ -89,8 +93,22 @@ A trusted-but-malicious console must not get a root shell from this milestone.
 ### Logging
 
 Logs and receipts may include node IDs, intent IDs, kinds, status, and redacted
-error strings. They must not include passwords, private keys, session keys, or
-raw elevation proofs. `internal/security` is the redaction gate.
+error strings. They must not include passwords, private keys, session keys,
+raw enrollment tokens, or raw elevation proofs. `internal/security` is the
+redaction gate.
+
+### Enrollment and installers
+
+Identity-signed enrollment is not a substitute that can be skipped in favor of
+OS code signing alone. Installers must not contain reusable private keys,
+unrestricted credentials, or unrestricted network access. Tokens are one-time
+or scoped; raw tokens are not stored in Badger.
+
+### Self-update
+
+A GitHub or mesh-cached artifact is untrusted until the recipient verifies the
+**publisher** signature, hash, version policy, OS/arch (on apply), and expiry.
+Paired peers cannot substitute their own signing key.
 
 ## Non-goals for this milestone (still constrained)
 
@@ -109,3 +127,7 @@ raw elevation proofs. `internal/security` is the redaction gate.
 4. Desktop mode upgrade without proof fails; with proof succeeds; secret absent
    from store export.
 5. Interop encoder rejects FSE file/block payload types.
+6. Enrollment with `0.0.0.0/0` or a second consume is refused; raw token absent
+   from the store.
+7. Mesh peer cannot introduce an update signed by a non-publisher key.
+8. Console refuses to apply endpoint-management intents.

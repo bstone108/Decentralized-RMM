@@ -58,3 +58,22 @@ func TestUnknownTypeRejected(t *testing.T) {
 		t.Fatal("fse message type must not be accepted")
 	}
 }
+
+func TestArtifactMessagesRoundTrip(t *testing.T) {
+	raw, err := Encode(Message{Type: TypeArtifactRequest, ArtifactRequest: &ArtifactRequest{
+		Component: "rmm-agent", Version: "1.0.0", GOOS: "linux", GOARCH: "amd64",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := Decode(raw)
+	if err != nil || got.ArtifactRequest.Component != "rmm-agent" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if _, err := Encode(Message{Type: TypeArtifactOffer, ArtifactOffer: &ArtifactOffer{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Encode(Message{Type: TypeArtifactChunk, ArtifactChunk: &ArtifactChunk{Data: []byte("x"), Last: true}}); err != nil {
+		t.Fatal(err)
+	}
+}

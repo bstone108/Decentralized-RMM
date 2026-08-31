@@ -19,6 +19,9 @@ const (
 	PrefixInv     = "rmm/v1/inventory/"
 	PrefixDesktop = "rmm/v1/desktop/"
 	PrefixMeta    = "rmm/v1/meta/"
+	PrefixEnroll  = "rmm/v1/enroll/"
+	PrefixArtifact = "rmm/v1/artifact/"
+	PrefixUpdate  = "rmm/v1/update/"
 	PrefixInterop = "interop/mgmt/v1/"
 
 	// ForbiddenPrefix is File-Sync-Engine's on-disk prefix. RMM must never
@@ -28,7 +31,8 @@ const (
 
 var allowedPrefixes = []string{
 	PrefixPrivate, PrefixTrust, PrefixIntent, PrefixIdem, PrefixReceipt,
-	PrefixAudit, PrefixInv, PrefixDesktop, PrefixMeta, PrefixInterop,
+	PrefixAudit, PrefixInv, PrefixDesktop, PrefixMeta, PrefixEnroll,
+	PrefixArtifact, PrefixUpdate, PrefixInterop,
 }
 
 type Store interface {

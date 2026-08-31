@@ -16,4 +16,7 @@ vet:
 	go vet ./...
 
 build:
+	go build -trimpath -o bin/rmm-agent ./cmd/rmm-agent
+	go build -trimpath -o bin/rmm-console ./cmd/rmm-console
+	go build -trimpath -o bin/rmm-pack ./cmd/rmm-pack
 	go build -trimpath -o bin/rmm ./cmd/rmm

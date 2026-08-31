@@ -9,12 +9,15 @@ import (
 	"time"
 
 	"github.com/bstone108/Decentralized-RMM/internal/desktop"
+	"github.com/bstone108/Decentralized-RMM/internal/enroll"
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
 	"github.com/bstone108/Decentralized-RMM/internal/intent"
+	"github.com/bstone108/Decentralized-RMM/internal/localpeer"
 	"github.com/bstone108/Decentralized-RMM/internal/mesh"
 	"github.com/bstone108/Decentralized-RMM/internal/protocol"
 	"github.com/bstone108/Decentralized-RMM/internal/store"
 	"github.com/bstone108/Decentralized-RMM/internal/trust"
+	"github.com/bstone108/Decentralized-RMM/internal/update"
 )
 
 type Role string
@@ -35,9 +38,18 @@ type Node struct {
 	mu               sync.Mutex
 	listener         net.Listener
 	pendingElevation map[string]*desktop.ElevationProof
+	presenceDir      string
+	updateCache      update.Cache
 }
 
 func Open(st store.Store, role Role, verify desktop.Verifier) (*Node, error) {
+	switch role {
+	case RoleAgent, RoleConsole:
+	case RoleDual:
+		return nil, fmt.Errorf("dual role is withdrawn: console and agent are separately deployable")
+	default:
+		return nil, fmt.Errorf("invalid role %q", role)
+	}
 	id, err := LoadOrCreateIdentity(st)
 	if err != nil {
 		return nil, err
@@ -45,26 +57,56 @@ func Open(st store.Store, role Role, verify desktop.Verifier) (*Node, error) {
 	if verify == nil {
 		verify = desktop.PasswordVerifier{NoUsablePass: true}
 	}
-	return &Node{
+	n := &Node{
 		Role:             role,
 		ID:               id,
 		Store:            st,
 		Trust:            trust.New(st),
 		Verify:           verify,
 		pendingElevation: map[string]*desktop.ElevationProof{},
-	}, nil
+		updateCache:      update.Cache{Store: st},
+	}
+	if p := st.Path(); p != "" && p != ":memory:" {
+		n.presenceDir = localpeer.DataDirFromStorePath(p)
+	}
+	return n, nil
 }
+
+// SetPresenceDir sets the directory used for same-host agent advertisement.
+func (n *Node) SetPresenceDir(dir string) { n.presenceDir = dir }
+
+func (n *Node) PresenceDir() string { return n.presenceDir }
+
+func (n *Node) HasListener() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.listener != nil
+}
+
+func (n *Node) UpdateCache() update.Cache { return n.updateCache }
 
 func (n *Node) Listen(addr string) (string, error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return "", err
 	}
+	bound := ln.Addr().String()
 	n.mu.Lock()
 	n.listener = ln
 	n.mu.Unlock()
+	if n.Role == RoleAgent {
+		if dir := n.PresenceDir(); dir != "" {
+			_ = localpeer.Write(dir, localpeer.Advertisement{
+				NodeID:       n.ID.Public.NodeID,
+				PublicKey:    n.ID.Public.KeyBase64,
+				BoxPublicKey: n.ID.Public.BoxKeyBase64,
+				Role:         string(RoleAgent),
+				ListenAddr:   bound,
+			})
+		}
+	}
 	go n.acceptLoop()
-	return ln.Addr().String(), nil
+	return bound, nil
 }
 
 func (n *Node) acceptLoop() {
@@ -98,10 +140,24 @@ func (n *Node) Close() error {
 	ln := n.listener
 	n.listener = nil
 	n.mu.Unlock()
+	if n.Role == RoleAgent {
+		if dir := n.PresenceDir(); dir != "" {
+			_ = localpeer.Remove(dir)
+		}
+	}
 	if ln != nil {
 		return ln.Close()
 	}
 	return nil
+}
+
+// EnrollFromDir consumes a one-time/scoped identity-signed enrollment bundle
+// from disk if present. Already-consumed enrollments are a no-op.
+func (n *Node) EnrollFromDir(dir string) (enroll.Manifest, bool, error) {
+	if dir == "" {
+		dir = n.PresenceDir()
+	}
+	return enroll.ApplyIfPresent(n.Store, n.Trust, dir)
 }
 
 func (n *Node) Dial(ctx context.Context, addr, expectedNodeID string) (*mesh.Session, error) {
@@ -188,18 +244,41 @@ func (n *Node) Serve(sess *mesh.Session) error {
 	if err != nil {
 		return err
 	}
-	if msg.Type != protocol.TypeIntent || msg.Intent == nil {
-		return fmt.Errorf("expected intent")
+	switch msg.Type {
+	case protocol.TypeIntent:
+		if msg.Intent == nil {
+			return fmt.Errorf("expected intent")
+		}
+		applied, receipt, err := n.HandleIntent(*msg.Intent)
+		if err != nil && receipt.IntentID == "" {
+			return err
+		}
+		_ = applied
+		return sess.Send(protocol.Message{Type: protocol.TypeIntentAck, IntentAck: &receipt})
+	case protocol.TypeArtifactOffer:
+		if msg.ArtifactOffer == nil {
+			return fmt.Errorf("expected artifact offer")
+		}
+		return sess.Send(protocol.Message{Type: protocol.TypeArtifactOffer, ArtifactOffer: n.artifactOffer()})
+	case protocol.TypeArtifactRequest:
+		if msg.ArtifactRequest == nil {
+			return fmt.Errorf("expected artifact request")
+		}
+		return n.serveArtifactRequest(sess, *msg.ArtifactRequest)
+	default:
+		return fmt.Errorf("unexpected message type %s", msg.Type)
 	}
-	applied, receipt, err := n.HandleIntent(*msg.Intent)
-	if err != nil && receipt.IntentID == "" {
-		return err
-	}
-	_ = applied
-	return sess.Send(protocol.Message{Type: protocol.TypeIntentAck, IntentAck: &receipt})
 }
 
 func (n *Node) HandleIntent(in intent.Intent) (intent.Intent, intent.Receipt, error) {
+	if n.Role != RoleAgent {
+		in.Status = intent.Failed
+		in.LastError = "console has no endpoint-management agent function"
+		rec := in.Receipt(in.LastError, nil)
+		rec.Status = intent.Failed
+		rec.LastError = in.LastError
+		return in, rec, fmt.Errorf("console has no endpoint-management agent function")
+	}
 	proof := extractElevation(&in)
 	if proof != nil {
 		defer proof.Zero()
@@ -217,7 +296,7 @@ func (n *Node) HandleIntent(in intent.Intent) (intent.Intent, intent.Receipt, er
 		}
 		return existing, existing.Receipt("idempotent replay", nil), nil
 	}
-	if in.TargetNodeID != n.ID.Public.NodeID && n.Role != RoleDual {
+	if in.TargetNodeID != n.ID.Public.NodeID {
 		in.Status = intent.Received
 		_ = in.Transition(intent.Failed, "intent target mismatch")
 		_ = intent.Save(n.Store, in)

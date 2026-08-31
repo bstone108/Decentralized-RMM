@@ -25,7 +25,7 @@ Hello fields:
 
 - `protocolVersion` (must be 1)
 - `nodeID` (`rmm1:` fingerprint)
-- `role` (`console` | `agent` | `dual`)
+- `role` (`console` | `agent`)
 - `publicKey` (Ed25519, standard Base64)
 - `sessionPublicKey` (X25519, standard Base64)
 - `encryptionLevel` (minimum accepted 4; see table)
@@ -101,6 +101,9 @@ products, but this protocol is `rmm-hello-v1`, not `fse-peer-hello-v1`.
 | `desktop_request` | trusted session | RD session request |
 | `desktop_decision` | trusted session | allow/deny + mode |
 | `interop_record` | trusted session | signed+encrypted `interop/mgmt/v1` envelope |
+| `artifact_offer` | trusted session | cached signed-release **metadata** only |
+| `artifact_request` | trusted session | request one envelope by component/version/os/arch |
+| `artifact_chunk` | trusted session | slice of a signed envelope; recipient re-verifies |
 
 Unknown types are errors. Exactly one payload field must match `type`.
 

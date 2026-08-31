@@ -47,6 +47,30 @@ func TestDocsContracts(t *testing.T) {
 			"Windows 10",
 			"CGO_ENABLED=0",
 		},
+		"docs/ENROLLMENT.md": {
+			"identity-signed",
+			"one-time",
+			"allowedCIDRs",
+			"never embed",
+		},
+		"docs/DEPLOYMENT.md": {
+			"rmm-pack",
+			"rmm-agent",
+			"rmm-console",
+			"Dual-role",
+		},
+		"docs/CONSOLE.md": {
+			"no endpoint-management agent function",
+			"local authenticated connection",
+			"built-in authenticated mesh",
+			"not a terminal/TUI",
+		},
+		"docs/SELF_UPDATE.md": {
+			"independently",
+			"cannot introduce untrusted",
+			"OS-native",
+			"foreign OS",
+		},
 	}
 	for rel, needles := range mustContain {
 		body := read(t, filepath.Join(root, rel))

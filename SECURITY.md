@@ -9,6 +9,10 @@ Binding documents:
 - `docs/PROTOCOL.md`
 - `docs/REMOTE_DESKTOP.md`
 - `docs/INTEROP.md`
+- `docs/ENROLLMENT.md`
+- `docs/DEPLOYMENT.md`
+- `docs/CONSOLE.md`
+- `docs/SELF_UPDATE.md`
 
 Non-negotiable reminders:
 
@@ -18,3 +22,8 @@ Non-negotiable reminders:
   only: never persist, log, or replicate.
 - Do not share raw Badger files with File-Sync-Engine.
 - `command.run` fails closed in this foundation.
+- Installers never embed reusable private keys, unrestricted credentials, or
+  unrestricted network access.
+- Peers cannot introduce untrusted updates; each recipient verifies the
+  publisher independently.
+- The console has no endpoint-management agent function.

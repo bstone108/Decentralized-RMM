@@ -27,6 +27,9 @@ const (
 	TypeDesktopRequest  Type = "desktop_request"
 	TypeDesktopDecision Type = "desktop_decision"
 	TypeInteropRecord   Type = "interop_record"
+	TypeArtifactOffer   Type = "artifact_offer"
+	TypeArtifactRequest Type = "artifact_request"
+	TypeArtifactChunk   Type = "artifact_chunk"
 )
 
 type Message struct {
@@ -40,6 +43,9 @@ type Message struct {
 	DesktopRequest  *DesktopRequest  `json:"desktopRequest,omitempty"`
 	DesktopDecision *DesktopDecision `json:"desktopDecision,omitempty"`
 	InteropRecord   json.RawMessage  `json:"interopRecord,omitempty"`
+	ArtifactOffer   *ArtifactOffer   `json:"artifactOffer,omitempty"`
+	ArtifactRequest *ArtifactRequest `json:"artifactRequest,omitempty"`
+	ArtifactChunk   *ArtifactChunk   `json:"artifactChunk,omitempty"`
 }
 
 type Hello struct {
@@ -80,6 +86,42 @@ type DesktopDecision struct {
 	Mode    string `json:"mode"`
 }
 
+// ArtifactOffer advertises cached signed release metadata. Payload bytes are
+// never implied trusted; each recipient verifies independently.
+type ArtifactOffer struct {
+	Artifacts []ArtifactMeta `json:"artifacts"`
+}
+
+type ArtifactMeta struct {
+	Component       string `json:"component"`
+	Version         string `json:"version"`
+	GOOS            string `json:"goos"`
+	GOARCH          string `json:"goarch"`
+	SHA256          string `json:"sha256"`
+	Size            int    `json:"size"`
+	PublisherNodeID string `json:"publisherNodeID"`
+}
+
+type ArtifactRequest struct {
+	Component string `json:"component"`
+	Version   string `json:"version"`
+	GOOS      string `json:"goos"`
+	GOARCH    string `json:"goarch"`
+}
+
+// ArtifactChunk is one independently framed slice of a signed envelope.
+type ArtifactChunk struct {
+	Component string `json:"component"`
+	Version   string `json:"version"`
+	GOOS      string `json:"goos"`
+	GOARCH    string `json:"goarch"`
+	SHA256    string `json:"sha256"`
+	Offset    int    `json:"offset"`
+	Total     int    `json:"total"`
+	Data      []byte `json:"data"`
+	Last      bool   `json:"last"`
+}
+
 func (m Message) Validate() error {
 	switch m.Type {
 	case TypeHello:
@@ -117,6 +159,18 @@ func (m Message) Validate() error {
 	case TypeInteropRecord:
 		if len(m.InteropRecord) == 0 {
 			return fmt.Errorf("interop record payload required")
+		}
+	case TypeArtifactOffer:
+		if m.ArtifactOffer == nil {
+			return fmt.Errorf("artifact offer payload required")
+		}
+	case TypeArtifactRequest:
+		if m.ArtifactRequest == nil || m.ArtifactRequest.Component == "" {
+			return fmt.Errorf("artifact request payload required")
+		}
+	case TypeArtifactChunk:
+		if m.ArtifactChunk == nil {
+			return fmt.Errorf("artifact chunk payload required")
 		}
 	default:
 		return fmt.Errorf("unknown message type %q", m.Type)
@@ -190,5 +244,8 @@ func VerifyHello(h Hello) (identity.Public, error) {
 }
 
 func DefaultCapabilities() []string {
-	return []string{"intent.v1", "inventory.v1", "desktop.v1", "interop.mgmt.v1"}
+	return []string{
+		"intent.v1", "inventory.v1", "desktop.v1", "interop.mgmt.v1",
+		"artifact.cache.v1", "dht.candidates.v1",
+	}
 }

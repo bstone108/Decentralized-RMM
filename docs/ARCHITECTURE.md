@@ -8,15 +8,14 @@ excuse to violate the security or data-isolation rules.
 
 Decentralized-RMM is a native remote-management system:
 
-- a **console** for operators (CLI now; native GUI later, not a web-only plane)
-- **agents** on managed endpoints
+- a separately deployable **console** (native GUI/CLI presenter; not a TUI or
+  mandatory web console) that is itself an authenticated mesh peer
+- separately deployable **agents** on managed endpoints
+- an **`rmm-pack`** deployment tool that emits identity-provisioned installers
 - **local durable state** on every node
-- **endpoint inventory**
-- **desired-state / configuration jobs**
-- **application install / update / remove / verify**
-- **command and service management**
-- **durable receipt and audit history**
+- **endpoint inventory**, desired-state jobs, app/service intents, receipts
 - **remote desktop** (unattended or authorization-every-session)
+- **secure self-update** with independently verified, mesh-cacheable artifacts
 
 There is no required central server. Nodes form a trusted mesh. Relays and
 tunnels are optional reachability aids after trust, never a substitute for it.
@@ -38,7 +37,9 @@ X25519 + XChaCha20-Poly1305 sessions, and OS-native integrations.
 [ operator ]
     |
     v
-[ console process ] ----encrypted mesh---- [ agent process ]
+[ rmm-console ] --local auth session--> [ rmm-agent on same host, if trusted ]
+    |                                              |
+    +---- else built-in authenticated mesh --------+
     |                                              |
     v                                              v
 [ Badger rmm/v1/* ]                          [ Badger rmm/v1/* ]
@@ -48,11 +49,21 @@ X25519 + XChaCha20-Poly1305 sessions, and OS-native integrations.
                      v
               [ File-Sync-Engine ]
               (separate process, separate DB)
+
+[ rmm-pack ] --identity-signed enrollment--> [ platform-native installer tree ]
 ```
 
-The same `rmm` binary can run as `console`, `agent`, or `dual` (a machine that
-is both). Console and agent are OS-native programs. A browser may later view
-status; it is not the control plane.
+`rmm-console`, `rmm-agent`, and `rmm-pack` are separately deployable native
+programs. Dual-role is withdrawn. The console has **no** endpoint-management
+agent function. If a compatible trusted platform agent runs on the same
+computer, the console prefers a local authenticated connection and reuses that
+agent's mesh presence; otherwise it starts its own built-in authenticated mesh
+(identity, DHT/routing candidates, discovery, relay/tunnel planning, artifact
+cache). A browser is not the control plane. There is no TUI product.
+
+Installer enrollment, policy visibility, and self-update contracts are in
+`docs/ENROLLMENT.md`, `docs/DEPLOYMENT.md`, `docs/CONSOLE.md`, and
+`docs/SELF_UPDATE.md`.
 
 ## Trust plane
 
@@ -90,6 +101,9 @@ Key namespaces (separate from File-Sync-Engine's `fse/v1/`):
 | `rmm/v1/audit/` | local | redacted audit events |
 | `rmm/v1/inventory/` | mesh protocol only | endpoint inventory |
 | `rmm/v1/desktop/` | local + signed policy | desktop authorization mode, never passwords |
+| `rmm/v1/enroll/` | local | consumed enrollment (token hash only), revocation |
+| `rmm/v1/artifact/` | mesh after independent verify | signed release envelopes (any OS/arch) |
+| `rmm/v1/update/` | local | apply receipts / rollback notes |
 | `interop/mgmt/v1/` | optional, signed+encrypted | management records intentionally shared with FSE |
 
 Raw Badger directories, SST files, and WAL files are **never** shared with
@@ -158,3 +172,9 @@ frame payloads.
 3. An untrusted node is refused a session.
 4. A desktop-mode change to unattended without an ephemeral admin proof fails,
    and the password never appears in the store, export, or audit log.
+5. Installers embed an identity-signed enrollment manifest with scoped
+   network, one-time consume, and no private keys.
+6. Console prefers a local trusted agent mesh or starts built-in mesh; console
+   refuses to apply agent intents.
+7. Signed artifacts can be cached/exchanged (including foreign OS) and only
+   applied after independent publisher verification.
