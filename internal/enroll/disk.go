@@ -43,11 +43,12 @@ func LoadBundle(dir string) (Bundle, error) {
 	return Bundle{Manifest: m, Token: token}, nil
 }
 
-// ApplyIfPresent consumes a one-time/scoped enrollment from dir when files
-// exist. A previously consumed enrollment is a no-op. Missing files are not
-// an error (manual pairing remains valid). The raw token is removed after a
-// successful consume so it cannot be reused from the endpoint data directory.
-func ApplyIfPresent(st store.Store, book *trust.Book, dir string) (Manifest, bool, error) {
+// ApplyIfPresent consumes a grant from dir when files exist. A node that
+// already applied this grant is a no-op (restart must not take another use).
+// Missing files are not an error (manual pairing remains valid). The raw
+// grant credential is removed from the endpoint data directory after a
+// successful consume; the hashed credential remains in the signed manifest.
+func ApplyIfPresent(st store.Store, book *trust.Book, dir, enrolleeNodeID string) (Manifest, bool, error) {
 	if dir == "" {
 		return Manifest{}, false, nil
 	}
@@ -58,18 +59,16 @@ func ApplyIfPresent(st store.Store, book *trust.Book, dir string) (Manifest, boo
 	if err != nil {
 		return Manifest{}, false, err
 	}
-	used, err := useCount(st, m.EnrollmentID)
-	if err != nil {
+	if rec, ok, err := LocallyEnrolled(st, m.Grant(), enrolleeNodeID); err != nil {
 		return Manifest{}, false, err
-	}
-	if used > 0 {
+	} else if ok && rec.GrantID != "" {
 		return m, false, nil
 	}
 	bundle, err := LoadBundle(dir)
 	if err != nil {
 		return Manifest{}, false, err
 	}
-	if err := Consume(st, book, bundle.Manifest, bundle.Token); err != nil {
+	if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, enrolleeNodeID); err != nil {
 		return Manifest{}, false, err
 	}
 	_ = os.Remove(TokenFile(dir))
@@ -93,14 +92,12 @@ func LoadPublisher(st store.Store) (string, bool, error) {
 
 func SelfUpdateAllowed(st store.Store) (bool, error) {
 	allowed := false
-	err := st.PrefixScan([]byte(store.Key(store.PrefixEnroll, "used")), func(key, value []byte) error {
-		var rec struct {
-			SelfUpdate bool `json:"selfUpdate"`
-		}
-		if err := json.Unmarshal(value, &rec); err != nil {
+	err := st.PrefixScan([]byte(store.Key(store.PrefixEnroll, "manifest")), func(key, value []byte) error {
+		var m Manifest
+		if err := json.Unmarshal(value, &m); err != nil {
 			return err
 		}
-		if rec.SelfUpdate {
+		if m.Flags.SelfUpdate {
 			allowed = true
 		}
 		return nil

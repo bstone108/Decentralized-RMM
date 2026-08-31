@@ -93,7 +93,7 @@ func main() {
 			title, body := consoleui.EnrollmentPolicy(man)
 			_ = consoleui.Native{PolicyFile: enroll.PolicyFile(*data)}.ShowPolicy(title, body)
 			if applied {
-				fmt.Printf("consumed enrollment %s (one-time/scoped)\n", man.EnrollmentID)
+				fmt.Printf("consumed enrollment grant %s (%s)\n", man.Grant(), man.Scope.AllowedUses.PolicyLine())
 			}
 		}
 		bound, err := n.Listen(*addr)

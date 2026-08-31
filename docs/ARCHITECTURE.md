@@ -172,8 +172,9 @@ frame payloads.
 3. An untrusted node is refused a session.
 4. A desktop-mode change to unattended without an ephemeral admin proof fails,
    and the password never appears in the store, export, or audit log.
-5. Installers embed an identity-signed enrollment manifest with scoped
-   network, one-time consume, and no private keys.
+5. Installers embed an identity-signed enrollment grant with a unique
+   revocable grant ID, configurable allowed-use (exactly-one, finite N, or
+   unlimited), scoped network, and no private keys.
 6. Console prefers a local trusted agent mesh or starts built-in mesh; console
    refuses to apply agent intents.
 7. Signed artifacts can be cached/exchanged (including foreign OS) and only

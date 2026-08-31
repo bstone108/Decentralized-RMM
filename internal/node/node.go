@@ -151,13 +151,13 @@ func (n *Node) Close() error {
 	return nil
 }
 
-// EnrollFromDir consumes a one-time/scoped identity-signed enrollment bundle
-// from disk if present. Already-consumed enrollments are a no-op.
+// EnrollFromDir consumes an identity-signed enrollment grant from disk if
+// present. An already-applied grant on this node is a no-op.
 func (n *Node) EnrollFromDir(dir string) (enroll.Manifest, bool, error) {
 	if dir == "" {
 		dir = n.PresenceDir()
 	}
-	return enroll.ApplyIfPresent(n.Store, n.Trust, dir)
+	return enroll.ApplyIfPresent(n.Store, n.Trust, dir, n.ID.Public.NodeID)
 }
 
 func (n *Node) Dial(ctx context.Context, addr, expectedNodeID string) (*mesh.Session, error) {
@@ -265,6 +265,25 @@ func (n *Node) Serve(sess *mesh.Session) error {
 			return fmt.Errorf("expected artifact request")
 		}
 		return n.serveArtifactRequest(sess, *msg.ArtifactRequest)
+	case protocol.TypeEnrollmentRevoke:
+		if msg.EnrollmentRevoke == nil {
+			return fmt.Errorf("expected enrollment revoke")
+		}
+		if err := enroll.ApplyRevocation(n.Store, n.Trust, *msg.EnrollmentRevoke); err != nil {
+			return sess.Send(protocol.Message{Type: protocol.TypeError, Error: &protocol.Error{Code: "revoke_rejected", Message: err.Error()}})
+		}
+		return sess.Send(protocol.Message{Type: protocol.TypeEnrollmentRevoke, EnrollmentRevoke: msg.EnrollmentRevoke})
+	case protocol.TypeEnrollmentUse:
+		if msg.EnrollmentUse == nil {
+			return fmt.Errorf("expected enrollment use")
+		}
+		if n.Role != RoleConsole {
+			return sess.Send(protocol.Message{Type: protocol.TypeError, Error: &protocol.Error{Code: "not_issuer", Message: "only the console ledger records grant uses"}})
+		}
+		if err := n.RecordReportedUse(*msg.EnrollmentUse); err != nil {
+			return sess.Send(protocol.Message{Type: protocol.TypeError, Error: &protocol.Error{Code: "use_rejected", Message: err.Error()}})
+		}
+		return sess.Send(protocol.Message{Type: protocol.TypeEnrollmentUse, EnrollmentUse: msg.EnrollmentUse})
 	default:
 		return fmt.Errorf("unexpected message type %s", msg.Type)
 	}

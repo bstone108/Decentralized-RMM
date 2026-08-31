@@ -42,6 +42,24 @@ func (m *Memory) Put(key, value []byte) error {
 	return nil
 }
 
+func (m *Memory) CompareAndSwap(key, old, new []byte) error {
+	if err := AssertAllowedKey(key); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cur, ok := m.data[string(key)]
+	if !ok {
+		if len(old) != 0 {
+			return ErrCASConflict
+		}
+	} else if !bytes.Equal(cur, old) {
+		return ErrCASConflict
+	}
+	m.data[string(key)] = append([]byte(nil), new...)
+	return nil
+}
+
 func (m *Memory) Delete(key []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

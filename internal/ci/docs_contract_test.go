@@ -49,7 +49,9 @@ func TestDocsContracts(t *testing.T) {
 		},
 		"docs/ENROLLMENT.md": {
 			"identity-signed",
-			"one-time",
+			"exactly-one",
+			"unlimited",
+			"grant ID",
 			"allowedCIDRs",
 			"never embed",
 		},

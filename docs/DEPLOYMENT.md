@@ -24,6 +24,7 @@ rmm-pack build \
   --bootstrap rmm1:issuer=10.0.0.9:7946 \
   --os linux --arch amd64 \
   --desktop authorization-required \
+  --uses exactly-one \
   --self-update
 ```
 

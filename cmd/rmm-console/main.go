@@ -163,6 +163,44 @@ func main() {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(ack)
+	case "revoke":
+		fs := flag.NewFlagSet("revoke", flag.ExitOnError)
+		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		grant := fs.String("grant", "", "unique grant ID")
+		reason := fs.String("reason", enroll.ReasonRevoked, "revoked|retired")
+		addr := fs.String("addr", "", "optional trusted peer to publish the signed revocation")
+		target := fs.String("target", "", "peer node id when --addr is set")
+		_ = fs.Parse(os.Args[2:])
+		if *grant == "" {
+			appboot.Fatal(fmt.Errorf("--grant is required"))
+		}
+		st, n, err := appboot.Open(*data, node.RoleConsole)
+		if err != nil {
+			appboot.Fatal(err)
+		}
+		defer st.Close()
+		notice, err := n.RevokeGrant(*grant, *reason)
+		if err != nil {
+			appboot.Fatal(err)
+		}
+		if *addr != "" {
+			if *target == "" {
+				appboot.Fatal(fmt.Errorf("--target is required with --addr"))
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			sess, err := n.Dial(ctx, *addr, *target)
+			if err != nil {
+				appboot.Fatal(err)
+			}
+			defer sess.Close()
+			if err := n.PublishRevocation(sess, notice); err != nil {
+				appboot.Fatal(err)
+			}
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(notice)
 	default:
 		usage()
 		os.Exit(2)
@@ -188,5 +226,6 @@ Commands:
   run --data DIR [--agent-data DIR] [--addr 127.0.0.1:7947]
   policy --manifest enrollment.manifest.json
   intent --data DIR --addr HOST:PORT --target rmm1:... --kind inventory.collect
+  revoke --data DIR --grant GRANTID [--reason revoked|retired] [--addr HOST:PORT --target rmm1:...]
 `, version)
 }

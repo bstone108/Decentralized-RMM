@@ -123,6 +123,36 @@ func (s *Badger) Put(key, value []byte) error {
 	})
 }
 
+func (s *Badger) CompareAndSwap(key, old, new []byte) error {
+	if err := AssertAllowedKey(key); err != nil {
+		return err
+	}
+	err := s.db.Update(func(txn *badger.Txn) error {
+		item, err := txn.Get(key)
+		if err == badger.ErrKeyNotFound {
+			if len(old) != 0 {
+				return ErrCASConflict
+			}
+			return txn.Set(key, new)
+		}
+		if err != nil {
+			return err
+		}
+		var cur []byte
+		if err := item.Value(func(v []byte) error {
+			cur = append([]byte(nil), v...)
+			return nil
+		}); err != nil {
+			return err
+		}
+		if !bytes.Equal(cur, old) {
+			return ErrCASConflict
+		}
+		return txn.Set(key, new)
+	})
+	return err
+}
+
 func (s *Badger) Delete(key []byte) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		return txn.Delete(key)

@@ -32,18 +32,18 @@ func TestApplyIfPresentOnceAndDropToken(t *testing.T) {
 	}
 	st := store.NewMemory()
 	book := trust.New(st)
-	got, applied, err := ApplyIfPresent(st, book, dir)
-	if err != nil || !applied || got.EnrollmentID != bundle.Manifest.EnrollmentID {
+	got, applied, err := ApplyIfPresent(st, book, dir, "agent-1")
+	if err != nil || !applied || got.Grant() != bundle.Manifest.Grant() {
 		t.Fatalf("%+v %v %v", got, applied, err)
 	}
 	if _, err := os.Stat(TokenFile(dir)); !os.IsNotExist(err) {
-		t.Fatal("raw token must be removed after consume")
+		t.Fatal("raw grant credential must be removed after consume")
 	}
-	got, applied, err = ApplyIfPresent(st, book, dir)
+	got, applied, err = ApplyIfPresent(st, book, dir, "agent-1")
 	if err != nil || applied {
 		t.Fatalf("restart must not re-consume: applied=%v err=%v", applied, err)
 	}
-	if got.EnrollmentID != bundle.Manifest.EnrollmentID {
-		t.Fatal(got.EnrollmentID)
+	if got.Grant() != bundle.Manifest.Grant() {
+		t.Fatal(got.GrantID)
 	}
 }

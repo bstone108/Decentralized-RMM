@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bstone108/Decentralized-RMM/internal/enroll"
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
 	"github.com/bstone108/Decentralized-RMM/internal/intent"
 )
@@ -18,34 +19,38 @@ const Version = 1
 type Type string
 
 const (
-	TypeHello           Type = "hello"
-	TypeError           Type = "error"
-	TypeIntent          Type = "intent"
-	TypeIntentAck       Type = "intent_ack"
-	TypeInventory       Type = "inventory"
-	TypePeerExchange    Type = "peer_exchange"
-	TypeDesktopRequest  Type = "desktop_request"
-	TypeDesktopDecision Type = "desktop_decision"
-	TypeInteropRecord   Type = "interop_record"
-	TypeArtifactOffer   Type = "artifact_offer"
-	TypeArtifactRequest Type = "artifact_request"
-	TypeArtifactChunk   Type = "artifact_chunk"
+	TypeHello            Type = "hello"
+	TypeError            Type = "error"
+	TypeIntent           Type = "intent"
+	TypeIntentAck        Type = "intent_ack"
+	TypeInventory        Type = "inventory"
+	TypePeerExchange     Type = "peer_exchange"
+	TypeDesktopRequest   Type = "desktop_request"
+	TypeDesktopDecision  Type = "desktop_decision"
+	TypeInteropRecord    Type = "interop_record"
+	TypeArtifactOffer    Type = "artifact_offer"
+	TypeArtifactRequest  Type = "artifact_request"
+	TypeArtifactChunk    Type = "artifact_chunk"
+	TypeEnrollmentRevoke Type = "enrollment_revoke"
+	TypeEnrollmentUse    Type = "enrollment_use"
 )
 
 type Message struct {
-	Type            Type             `json:"type"`
-	Hello           *Hello           `json:"hello,omitempty"`
-	Error           *Error           `json:"error,omitempty"`
-	Intent          *intent.Intent   `json:"intent,omitempty"`
-	IntentAck       *intent.Receipt  `json:"intentAck,omitempty"`
-	Inventory       json.RawMessage  `json:"inventory,omitempty"`
-	PeerExchange    *PeerExchange    `json:"peerExchange,omitempty"`
-	DesktopRequest  *DesktopRequest  `json:"desktopRequest,omitempty"`
-	DesktopDecision *DesktopDecision `json:"desktopDecision,omitempty"`
-	InteropRecord   json.RawMessage  `json:"interopRecord,omitempty"`
-	ArtifactOffer   *ArtifactOffer   `json:"artifactOffer,omitempty"`
-	ArtifactRequest *ArtifactRequest `json:"artifactRequest,omitempty"`
-	ArtifactChunk   *ArtifactChunk   `json:"artifactChunk,omitempty"`
+	Type             Type                     `json:"type"`
+	Hello            *Hello                   `json:"hello,omitempty"`
+	Error            *Error                   `json:"error,omitempty"`
+	Intent           *intent.Intent           `json:"intent,omitempty"`
+	IntentAck        *intent.Receipt          `json:"intentAck,omitempty"`
+	Inventory        json.RawMessage          `json:"inventory,omitempty"`
+	PeerExchange     *PeerExchange            `json:"peerExchange,omitempty"`
+	DesktopRequest   *DesktopRequest          `json:"desktopRequest,omitempty"`
+	DesktopDecision  *DesktopDecision         `json:"desktopDecision,omitempty"`
+	InteropRecord    json.RawMessage          `json:"interopRecord,omitempty"`
+	ArtifactOffer    *ArtifactOffer           `json:"artifactOffer,omitempty"`
+	ArtifactRequest  *ArtifactRequest         `json:"artifactRequest,omitempty"`
+	ArtifactChunk    *ArtifactChunk           `json:"artifactChunk,omitempty"`
+	EnrollmentRevoke *enroll.RevocationNotice `json:"enrollmentRevoke,omitempty"`
+	EnrollmentUse    *enroll.UseReceipt       `json:"enrollmentUse,omitempty"`
 }
 
 type Hello struct {
@@ -172,6 +177,14 @@ func (m Message) Validate() error {
 		if m.ArtifactChunk == nil {
 			return fmt.Errorf("artifact chunk payload required")
 		}
+	case TypeEnrollmentRevoke:
+		if m.EnrollmentRevoke == nil || m.EnrollmentRevoke.GrantID == "" {
+			return fmt.Errorf("enrollment revoke payload required")
+		}
+	case TypeEnrollmentUse:
+		if m.EnrollmentUse == nil || m.EnrollmentUse.GrantID == "" {
+			return fmt.Errorf("enrollment use payload required")
+		}
 	default:
 		return fmt.Errorf("unknown message type %q", m.Type)
 	}
@@ -246,6 +259,6 @@ func VerifyHello(h Hello) (identity.Public, error) {
 func DefaultCapabilities() []string {
 	return []string{
 		"intent.v1", "inventory.v1", "desktop.v1", "interop.mgmt.v1",
-		"artifact.cache.v1", "dht.candidates.v1",
+		"artifact.cache.v1", "dht.candidates.v1", "enrollment.revoke.v1",
 	}
 }

@@ -3,23 +3,26 @@ package enroll
 import (
 	"bytes"
 	"runtime"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/bstone108/Decentralized-RMM/internal/desktop"
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
+	"github.com/bstone108/Decentralized-RMM/internal/intent"
 	"github.com/bstone108/Decentralized-RMM/internal/store"
 	"github.com/bstone108/Decentralized-RMM/internal/trust"
 )
 
 func testSpec() Spec {
 	return Spec{
-		OrgID:        "acme",
-		TargetOS:     []string{runtime.GOOS},
-		TargetArch:   []string{runtime.GOARCH},
-		MaxUses:      1,
-		TTL:          time.Hour,
-		RevocationID: "rev-1",
+		OrgID:       "acme",
+		TargetOS:    []string{runtime.GOOS},
+		TargetArch:  []string{runtime.GOARCH},
+		AllowedUses: AllowedUses{Mode: UseExactlyOne, Count: 1},
+		TTL:         time.Hour,
 		BootstrapPeers: []BootstrapPeer{{
 			NodeID: "rmm1:console", Address: "10.1.2.3:7946", Kind: "configured",
 		}},
@@ -29,7 +32,7 @@ func testSpec() Spec {
 	}
 }
 
-func TestIssueVerifyConsumeOnce(t *testing.T) {
+func TestIssueVerifyConsumeExactlyOne(t *testing.T) {
 	issuer, err := identity.Generate()
 	if err != nil {
 		t.Fatal(err)
@@ -38,31 +41,139 @@ func TestIssueVerifyConsumeOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Verify(bundle.Manifest); err != nil {
-		t.Fatal(err)
+	if bundle.Manifest.GrantID == "" || bundle.Manifest.GrantID != bundle.Manifest.RevocationID {
+		t.Fatalf("unique revocable grant id required: %+v", bundle.Manifest)
 	}
 	st := store.NewMemory()
 	book := trust.New(st)
-	if err := Consume(st, book, bundle.Manifest, bundle.Token); err != nil {
+	rec, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "agent-a")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Consume(st, book, bundle.Manifest, bundle.Token); err == nil {
-		t.Fatal("one-time enrollment must not reuse")
+	if rec.UseSeq != 1 || rec.Mode != UseExactlyOne {
+		t.Fatalf("%+v", rec)
+	}
+	if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "agent-b"); err == nil {
+		t.Fatal("exactly-one grant must refuse a second enrollee")
+	}
+	again, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "agent-a")
+	if err != nil || again.UseSeq != 1 {
+		t.Fatalf("same enrollee restart must not take another use: %+v %v", again, err)
 	}
 	dump, _ := store.DumpValues(st)
 	if bytes.Contains(dump, bundle.Token) {
-		t.Fatal("raw enrollment token must not be stored")
+		t.Fatal("raw grant credential must not be stored")
 	}
 	if bytes.Contains(dump, []byte(issuer.SeedBase64())) {
 		t.Fatal("issuer private key must not be stored from enrollment")
 	}
-	pol, err := desktop.LoadPolicy(st)
-	if err != nil || pol.Mode != desktop.ModeAuthorizationRequired || !pol.InstallAskedOperator {
-		t.Fatalf("%+v %v", pol, err)
+	got, err := ListReceipts(st, bundle.Manifest.Grant())
+	if err != nil || len(got) != 1 {
+		t.Fatalf("receipts %v %v", got, err)
 	}
-	ok, err := book.Trusted(issuer.Public.NodeID)
-	if err != nil || !ok {
-		t.Fatal("issuer must be trusted after enrollment")
+}
+
+func TestFiniteAndUnlimitedUses(t *testing.T) {
+	issuer, _ := identity.Generate()
+	spec := testSpec()
+	spec.AllowedUses = AllowedUses{Mode: UseFinite, Count: 3}
+	bundle, err := Issue(issuer, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := store.NewMemory()
+	book := trust.New(st)
+	for i, id := range []string{"a", "b", "c"} {
+		rec, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, id)
+		if err != nil || rec.UseSeq != i+1 {
+			t.Fatalf("use %d: %+v %v", i+1, rec, err)
+		}
+	}
+	if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "d"); err == nil {
+		t.Fatal("finite:3 must exhaust")
+	}
+	receipts, _ := ListReceipts(st, bundle.Manifest.Grant())
+	if len(receipts) != 3 {
+		t.Fatalf("want 3 receipts got %d", len(receipts))
+	}
+
+	spec.AllowedUses = AllowedUses{Mode: UseUnlimited}
+	unlim, err := Issue(issuer, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st = store.NewMemory()
+	book = trust.New(st)
+	for i := 0; i < 8; i++ {
+		if _, err := ConsumeFor(st, book, unlim.Manifest, unlim.Token, fmtNode(i)); err != nil {
+			t.Fatal(i, err)
+		}
+	}
+	receipts, _ = ListReceipts(st, unlim.Manifest.Grant())
+	if len(receipts) != 8 {
+		t.Fatalf("unlimited must keep a receipt per use, got %d", len(receipts))
+	}
+}
+
+func fmtNode(i int) string { return "n-" + strconv.Itoa(i) }
+
+func TestAtomicFiniteConsume(t *testing.T) {
+	issuer, _ := identity.Generate()
+	spec := testSpec()
+	spec.AllowedUses = AllowedUses{Mode: UseFinite, Count: 5}
+	bundle, _ := Issue(issuer, spec)
+	st := store.NewMemory()
+	book := trust.New(st)
+	var ok atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id := "node-" + strconv.Itoa(i)
+			if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, id); err == nil {
+				ok.Add(1)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if ok.Load() != 5 {
+		t.Fatalf("atomic finite: want 5 successes got %d", ok.Load())
+	}
+	n, err := useCount(st, bundle.Manifest.Grant())
+	if err != nil || n != 5 {
+		t.Fatalf("counter %d %v", n, err)
+	}
+}
+
+func TestRevokePreventsFutureKeepsHistory(t *testing.T) {
+	issuer, _ := identity.Generate()
+	spec := testSpec()
+	spec.AllowedUses = AllowedUses{Mode: UseFinite, Count: 4}
+	bundle, _ := Issue(issuer, spec)
+	st := store.NewMemory()
+	book := trust.New(st)
+	_ = book.Add(trust.Offer(issuer, "console"))
+	if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "a"); err != nil {
+		t.Fatal(err)
+	}
+	notice, err := SignRevocation(issuer, bundle.Manifest.Grant(), ReasonRetired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyRevocation(st, book, notice); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ConsumeFor(st, book, bundle.Manifest, bundle.Token, "b"); err == nil {
+		t.Fatal("revoked grant must not enroll")
+	}
+	receipts, _ := ListReceipts(st, bundle.Manifest.Grant())
+	if len(receipts) != 1 {
+		t.Fatalf("historic receipts must be retained, got %d", len(receipts))
+	}
+	events, err := intent.ListAudit(st)
+	if err != nil || len(events) < 2 {
+		t.Fatalf("audit retained: %d %v", len(events), err)
 	}
 }
 
@@ -95,7 +206,7 @@ func TestExpiredAndRevoked(t *testing.T) {
 	spec.TTL = time.Hour
 	bundle, _ = Issue(issuer, spec)
 	st = store.NewMemory()
-	_ = Revoke(st, bundle.Manifest.RevocationID)
+	_ = Revoke(st, bundle.Manifest.Grant())
 	if err := Consume(st, trust.New(st), bundle.Manifest, bundle.Token); err == nil {
 		t.Fatal("revoked")
 	}
@@ -128,9 +239,27 @@ func TestPolicyTextVisible(t *testing.T) {
 	issuer, _ := identity.Generate()
 	bundle, _ := Issue(issuer, testSpec())
 	txt := PolicyText(bundle.Manifest)
-	for _, n := range []string{"identity-signed", "Desktop mode", "one-time", "never contain reusable private keys"} {
+	for _, n := range []string{"identity-signed", "Desktop mode", "exactly-one", "Grant ID", "never contain reusable private keys"} {
 		if !bytes.Contains([]byte(txt), []byte(n)) {
 			t.Fatalf("policy missing %q in %s", n, txt)
 		}
+	}
+}
+
+func TestParseUses(t *testing.T) {
+	one, err := ParseUses("exactly-one")
+	if err != nil || one.Mode != UseExactlyOne {
+		t.Fatal(one, err)
+	}
+	fin, err := ParseUses("finite:12")
+	if err != nil || fin.Count != 12 {
+		t.Fatal(fin, err)
+	}
+	un, err := ParseUses("unlimited")
+	if err != nil || un.Mode != UseUnlimited {
+		t.Fatal(un, err)
+	}
+	if _, err := ParseUses("finite:0"); err == nil {
+		t.Fatal("zero finite")
 	}
 }

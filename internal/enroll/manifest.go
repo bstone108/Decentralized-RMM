@@ -24,6 +24,7 @@ const Schema = "rmm-enroll-v1"
 type Manifest struct {
 	Schema             string           `json:"schema"`
 	ManifestID         string           `json:"manifestID"`
+	GrantID            string           `json:"grantID"`
 	EnrollmentID       string           `json:"enrollmentID"`
 	IssuerNodeID       string           `json:"issuerNodeID"`
 	IssuerPublicKey    string           `json:"issuerPublicKey"`
@@ -39,11 +40,12 @@ type Manifest struct {
 }
 
 type Scope struct {
-	OrgID      string   `json:"orgID"`
-	TargetOS   []string `json:"targetOS"`
-	TargetArch []string `json:"targetArch"`
-	MaxUses    int      `json:"maxUses"`
-	Network    Network  `json:"network"`
+	OrgID       string      `json:"orgID"`
+	TargetOS    []string    `json:"targetOS"`
+	TargetArch  []string    `json:"targetArch"`
+	AllowedUses AllowedUses `json:"allowedUses"`
+	MaxUses     int         `json:"maxUses,omitempty"` // legacy alias; prefer AllowedUses
+	Network     Network     `json:"network"`
 }
 
 type Network struct {
@@ -80,7 +82,8 @@ type Spec struct {
 	OrgID          string
 	TargetOS       []string
 	TargetArch     []string
-	MaxUses        int
+	AllowedUses    AllowedUses
+	MaxUses        int // convenience: 1 → exactly-one; N>1 → finite N
 	TTL            time.Duration
 	RevocationID   string
 	BootstrapPeers []BootstrapPeer
@@ -93,8 +96,17 @@ type Spec struct {
 }
 
 func Issue(issuer identity.Private, spec Spec) (Bundle, error) {
-	if spec.MaxUses < 1 {
-		spec.MaxUses = 1
+	uses := spec.AllowedUses
+	if uses.Mode == "" {
+		if spec.MaxUses > 1 {
+			uses = AllowedUses{Mode: UseFinite, Count: spec.MaxUses}
+		} else {
+			uses = AllowedUses{Mode: UseExactlyOne, Count: 1}
+		}
+	}
+	uses, err := uses.Normalize()
+	if err != nil {
+		return Bundle{}, err
 	}
 	if spec.TTL <= 0 {
 		spec.TTL = 24 * time.Hour
@@ -113,22 +125,28 @@ func Issue(issuer identity.Private, spec Spec) (Bundle, error) {
 		return Bundle{}, err
 	}
 	sum := sha256.Sum256(token)
+	gid := make([]byte, 16)
+	if _, err := rand.Read(gid); err != nil {
+		return Bundle{}, err
+	}
+	grantID := "grant:" + hex.EncodeToString(gid)
 	now := time.Now().UTC()
 	m := Manifest{
 		Schema:             Schema,
 		ManifestID:         hex.EncodeToString(sum[:8]) + "-m",
-		EnrollmentID:       hex.EncodeToString(sum[8:16]) + "-e",
+		GrantID:            grantID,
+		EnrollmentID:       grantID,
 		IssuerNodeID:       issuer.Public.NodeID,
 		IssuerPublicKey:    issuer.Public.KeyBase64,
 		IssuerBoxPublicKey: issuer.Public.BoxKeyBase64,
 		IssuedAt:           now,
 		ExpiresAt:          now.Add(spec.TTL),
-		RevocationID:       spec.RevocationID,
+		RevocationID:       grantID,
 		Scope: Scope{
-			OrgID:      spec.OrgID,
-			TargetOS:   append([]string(nil), spec.TargetOS...),
-			TargetArch: append([]string(nil), spec.TargetArch...),
-			MaxUses:    spec.MaxUses,
+			OrgID:       spec.OrgID,
+			TargetOS:    append([]string(nil), spec.TargetOS...),
+			TargetArch:  append([]string(nil), spec.TargetArch...),
+			AllowedUses: uses,
 			Network: Network{
 				BootstrapPeers: append([]BootstrapPeer(nil), spec.BootstrapPeers...),
 				AllowDHT:       spec.AllowDHT,
@@ -192,50 +210,48 @@ func VerifyToken(m Manifest, token []byte) error {
 }
 
 func Consume(st store.Store, book *trust.Book, m Manifest, token []byte) error {
+	_, err := ConsumeFor(st, book, m, token, "")
+	return err
+}
+
+func ConsumeFor(st store.Store, book *trust.Book, m Manifest, token []byte, enrolleeNodeID string) (UseReceipt, error) {
 	if _, err := Verify(m); err != nil {
-		return err
+		return UseReceipt{}, err
 	}
 	if time.Now().UTC().After(m.ExpiresAt) {
-		return fmt.Errorf("enrollment expired")
+		return UseReceipt{}, fmt.Errorf("enrollment expired")
 	}
 	if err := VerifyToken(m, token); err != nil {
-		return err
+		return UseReceipt{}, err
 	}
-	if revoked, err := IsRevoked(st, m.RevocationID); err != nil {
-		return err
+	if revoked, err := IsRevoked(st, m.Grant()); err != nil {
+		return UseReceipt{}, err
 	} else if revoked {
-		return fmt.Errorf("enrollment revoked")
+		return UseReceipt{}, fmt.Errorf("enrollment grant revoked")
 	}
 	if !inList(m.Scope.TargetOS, runtime.GOOS) {
-		return fmt.Errorf("enrollment not valid for os %s", runtime.GOOS)
+		return UseReceipt{}, fmt.Errorf("enrollment not valid for os %s", runtime.GOOS)
 	}
 	if !inList(m.Scope.TargetArch, runtime.GOARCH) {
-		return fmt.Errorf("enrollment not valid for arch %s", runtime.GOARCH)
-	}
-	used, err := useCount(st, m.EnrollmentID)
-	if err != nil {
-		return err
-	}
-	if used >= m.Scope.MaxUses {
-		return fmt.Errorf("enrollment already consumed")
+		return UseReceipt{}, fmt.Errorf("enrollment not valid for arch %s", runtime.GOARCH)
 	}
 	if err := validateNetwork(m.Scope.Network.AllowedCIDRs, m.Scope.Network.BootstrapPeers, m.Scope.Network.AllowDHT, m.Scope.Network.AllowRelay); err != nil {
-		return err
+		return UseReceipt{}, err
 	}
 	issuer, err := identity.ParsePublicWithBox(m.IssuerPublicKey, m.IssuerBoxPublicKey)
 	if err != nil {
-		return err
+		return UseReceipt{}, err
 	}
 	if err := book.Add(trust.Peer{NodeID: issuer.NodeID, PublicKey: issuer.KeyBase64, BoxPublicKey: issuer.BoxKeyBase64, Role: "console"}); err != nil {
-		return err
+		return UseReceipt{}, err
 	}
 	for _, pk := range m.IntendedIdentity.TrustedPeerPublicKeys {
 		p, err := identity.ParsePublic(pk)
 		if err != nil {
-			return err
+			return UseReceipt{}, err
 		}
 		if err := book.Add(trust.Peer{NodeID: p.NodeID, PublicKey: p.KeyBase64, Role: "peer"}); err != nil {
-			return err
+			return UseReceipt{}, err
 		}
 	}
 	pol := desktop.Policy{
@@ -244,52 +260,31 @@ func Consume(st store.Store, book *trust.Book, m Manifest, token []byte) error {
 		UnattendedRequiresProof: m.Flags.DesktopMode != desktop.ModeUnattended,
 	}
 	if err := desktop.SavePolicy(st, pol); err != nil {
-		return err
+		return UseReceipt{}, err
 	}
-	rec := map[string]any{
-		"enrollmentID": m.EnrollmentID,
-		"manifestID":   m.ManifestID,
-		"orgID":        m.Scope.OrgID,
-		"uses":         used + 1,
-		"consumedAt":   time.Now().UTC(),
-		"revocationID": m.RevocationID,
-		"selfUpdate":   m.Flags.SelfUpdate,
-		"desktopMode":  m.Flags.DesktopMode,
+	rec, err := consumeUse(st, m, enrolleeNodeID)
+	if err != nil {
+		return UseReceipt{}, err
 	}
-	if err := store.PutJSON(st, store.Key(store.PrefixEnroll, "used", m.EnrollmentID), rec); err != nil {
-		return err
+	if err := store.PutJSON(st, store.Key(store.PrefixEnroll, "manifest", m.Grant()), m); err != nil {
+		return UseReceipt{}, err
 	}
-	return store.PutJSON(st, store.Key(store.PrefixEnroll, "manifest", m.EnrollmentID), m)
-}
-
-func Revoke(st store.Store, revocationID string) error {
-	if revocationID == "" {
-		return fmt.Errorf("revocation id required")
-	}
-	return store.PutJSON(st, store.Key(store.PrefixEnroll, "revoked", revocationID), map[string]string{"id": revocationID})
-}
-
-func IsRevoked(st store.Store, revocationID string) (bool, error) {
-	if revocationID == "" {
-		return false, nil
-	}
-	_, ok, err := st.Get(store.Key(store.PrefixEnroll, "revoked", revocationID))
-	return ok, err
+	return rec, nil
 }
 
 func PolicyText(m Manifest) string {
 	var b strings.Builder
 	b.WriteString("Decentralized-RMM enrollment policy\n")
 	b.WriteString("This is identity-signed enrollment, not merely code signing.\n\n")
-	fmt.Fprintf(&b, "Issuer: %s\nOrg: %s\nExpires: %s\nRevocation: %s\nMax uses: %d (one-time/scoped)\n",
-		m.IssuerNodeID, m.Scope.OrgID, m.ExpiresAt.UTC().Format(time.RFC3339), m.RevocationID, m.Scope.MaxUses)
+	fmt.Fprintf(&b, "Grant ID: %s\nIssuer: %s\nOrg: %s\nExpires: %s\nRevocation: %s\n%s\n",
+		m.Grant(), m.IssuerNodeID, m.Scope.OrgID, m.ExpiresAt.UTC().Format(time.RFC3339), m.Grant(), m.allowed().PolicyLine())
 	fmt.Fprintf(&b, "Desktop mode: %s\nSelf-update: %v\n", m.Flags.DesktopMode, m.Flags.SelfUpdate)
 	fmt.Fprintf(&b, "DHT: %v  Relay: %v\nAllowed CIDRs: %s\n", m.Scope.Network.AllowDHT, m.Scope.Network.AllowRelay, strings.Join(m.Scope.Network.AllowedCIDRs, ", "))
 	b.WriteString("Bootstrap peers (scoped, not unrestricted network access):\n")
 	for _, p := range m.Scope.Network.BootstrapPeers {
 		fmt.Fprintf(&b, "  %s %s %s\n", p.Kind, p.NodeID, p.Address)
 	}
-	b.WriteString("\nInstallers never contain reusable private keys or passwords.\n")
+	b.WriteString("\nInstallers never contain reusable private keys or unrestricted credentials.\n")
 	return b.String()
 }
 
@@ -341,17 +336,6 @@ func validateNetwork(cidrs []string, peers []BootstrapPeer, allowDHT, allowRelay
 	}
 	_ = allowDHT
 	return nil
-}
-
-func useCount(st store.Store, enrollmentID string) (int, error) {
-	var rec struct {
-		Uses int `json:"uses"`
-	}
-	ok, err := store.GetJSON(st, store.Key(store.PrefixEnroll, "used", enrollmentID), &rec)
-	if err != nil || !ok {
-		return 0, err
-	}
-	return rec.Uses, nil
 }
 
 func canonical(m Manifest) []byte {

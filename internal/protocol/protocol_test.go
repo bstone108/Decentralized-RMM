@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/bstone108/Decentralized-RMM/internal/enroll"
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
 	"github.com/bstone108/Decentralized-RMM/internal/sesscrypt"
 )
@@ -74,6 +75,9 @@ func TestArtifactMessagesRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := Encode(Message{Type: TypeArtifactChunk, ArtifactChunk: &ArtifactChunk{Data: []byte("x"), Last: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Encode(Message{Type: TypeEnrollmentRevoke, EnrollmentRevoke: &enroll.RevocationNotice{GrantID: "grant:x"}}); err != nil {
 		t.Fatal(err)
 	}
 }

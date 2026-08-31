@@ -104,6 +104,8 @@ products, but this protocol is `rmm-hello-v1`, not `fse-peer-hello-v1`.
 | `artifact_offer` | trusted session | cached signed-release **metadata** only |
 | `artifact_request` | trusted session | request one envelope by component/version/os/arch |
 | `artifact_chunk` | trusted session | slice of a signed envelope; recipient re-verifies |
+| `enrollment_revoke` | trusted session | issuer-signed grant retirement/revocation |
+| `enrollment_use` | trusted session | per-use enrollment receipt for the issuer ledger |
 
 Unknown types are errors. Exactly one payload field must match `type`.
 

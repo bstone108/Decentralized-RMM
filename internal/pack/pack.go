@@ -14,6 +14,7 @@ import (
 
 	"github.com/bstone108/Decentralized-RMM/internal/enroll"
 	"github.com/bstone108/Decentralized-RMM/internal/identity"
+	"github.com/bstone108/Decentralized-RMM/internal/store"
 )
 
 type Request struct {
@@ -23,10 +24,12 @@ type Request struct {
 	ConsoleBinary []byte
 	Publisher     identity.Private
 	Spec          enroll.Spec
+	Ledger        store.Store // issuer ledger; private keys are never packed
 }
 
 type Result struct {
 	Dir            string
+	GrantID        string
 	ManifestPath   string
 	TokenPath      string
 	PolicyPath     string
@@ -49,6 +52,11 @@ func Build(outDir string, req Request) (Result, error) {
 	bundle, err := enroll.Issue(req.Publisher, req.Spec)
 	if err != nil {
 		return Result{}, err
+	}
+	if req.Ledger != nil {
+		if err := enroll.RegisterGrant(req.Ledger, bundle.Manifest); err != nil {
+			return Result{}, err
+		}
 	}
 	dir := filepath.Join(outDir, req.GOOS+"-"+req.GOARCH)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -93,6 +101,7 @@ func Build(outDir string, req Request) (Result, error) {
 	manSum := sha256.Sum256(manRaw)
 	return Result{
 		Dir:            dir,
+		GrantID:        bundle.Manifest.Grant(),
 		ManifestPath:   filepath.Join(dir, "enrollment.manifest.json"),
 		TokenPath:      filepath.Join(dir, "enrollment.token"),
 		PolicyPath:     filepath.Join(dir, "POLICY.txt"),

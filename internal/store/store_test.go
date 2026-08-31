@@ -177,6 +177,27 @@ func TestDumpValues(t *testing.T) {
 	}
 }
 
+func TestCompareAndSwap(t *testing.T) {
+	m := NewMemory()
+	key := Key(PrefixEnroll, "grant", "g1", "counter")
+	if err := m.CompareAndSwap(key, []byte("x"), []byte("1")); err != ErrCASConflict {
+		t.Fatalf("missing key with non-empty old: %v", err)
+	}
+	if err := m.CompareAndSwap(key, nil, []byte("1")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.CompareAndSwap(key, []byte("1"), []byte("2")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.CompareAndSwap(key, []byte("1"), []byte("3")); err != ErrCASConflict {
+		t.Fatalf("stale old: %v", err)
+	}
+	got, ok, _ := m.Get(key)
+	if !ok || string(got) != "2" {
+		t.Fatalf("%s", got)
+	}
+}
+
 func TestKeyJoin(t *testing.T) {
 	k := Key(PrefixIntent, "id")
 	if string(k) != "rmm/v1/intent/id" {

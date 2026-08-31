@@ -101,8 +101,10 @@ redaction gate.
 
 Identity-signed enrollment is not a substitute that can be skipped in favor of
 OS code signing alone. Installers must not contain reusable private keys,
-unrestricted credentials, or unrestricted network access. Tokens are one-time
-or scoped; raw tokens are not stored in Badger.
+unrestricted credentials, or unrestricted network access. Each grant has a
+unique revocable ID and an explicit allowed-use mode (exactly-one, finite N, or
+unlimited). Raw grant credentials are not stored in Badger. Revocation prevents
+future enrollments and retains historic receipts and audit.
 
 ### Self-update
 
@@ -127,7 +129,8 @@ Paired peers cannot substitute their own signing key.
 4. Desktop mode upgrade without proof fails; with proof succeeds; secret absent
    from store export.
 5. Interop encoder rejects FSE file/block payload types.
-6. Enrollment with `0.0.0.0/0` or a second consume is refused; raw token absent
-   from the store.
+6. Enrollment with `0.0.0.0/0` is refused; exhausted or revoked grants refuse
+   further uses; raw grant credentials are absent from the store; receipts
+   survive revocation.
 7. Mesh peer cannot introduce an update signed by a non-publisher key.
 8. Console refuses to apply endpoint-management intents.

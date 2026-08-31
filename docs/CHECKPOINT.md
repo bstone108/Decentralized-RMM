@@ -10,9 +10,9 @@ self-update / artifact cache.
 
 ## Architecture change
 
-Dual-role `rmm` is withdrawn. Live binaries are `rmm-agent`, `rmm-console`,
-`rmm-pack` (plus `rmm host-info`). Console is a mesh peer with no agent
-function. Enrollment is identity-signed, not merely code signing.
+Each installer grant has a unique revocable grant ID and configurable
+allowed-use (exactly-one, finite N, unlimited) with atomic consume, per-use
+receipts, and signed mesh revocation. Dual-role `rmm` stays withdrawn.
 
 ## Proof commands
 

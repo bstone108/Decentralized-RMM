@@ -48,9 +48,8 @@ func main() {
 		bootstrap := fs.String("bootstrap", "", "comma-separated nodeID=host:port bootstrap peers")
 		desktopMode := fs.String("desktop", string(desktop.ModeAuthorizationRequired), "unattended|authorization-required")
 		selfUpdate := fs.Bool("self-update", true, "allow secure self-update when policy permits")
-		maxUses := fs.Int("max-uses", 1, "one-time/scoped enrollment uses")
+		uses := fs.String("uses", "exactly-one", "exactly-one | finite:N | unlimited")
 		ttl := fs.Duration("ttl", 24*time.Hour, "enrollment expiry")
-		rev := fs.String("revocation-id", "", "revocation identifier")
 		dht := fs.Bool("allow-dht", false, "allow DHT candidate discovery (still not trust)")
 		relay := fs.Bool("allow-relay", false, "allow relay bootstrap peers")
 		_ = fs.Parse(os.Args[2:])
@@ -73,15 +72,18 @@ func main() {
 			appboot.Fatal(err)
 		}
 		defer st.Close()
+		allowed, err := enroll.ParseUses(*uses)
+		if err != nil {
+			appboot.Fatal(err)
+		}
 		spec := enroll.Spec{
-			OrgID:        *org,
-			MaxUses:      *maxUses,
-			TTL:          *ttl,
-			RevocationID: *rev,
-			AllowDHT:     *dht,
-			AllowRelay:   *relay,
-			DesktopMode:  desktop.Mode(*desktopMode),
-			SelfUpdate:   *selfUpdate,
+			OrgID:       *org,
+			AllowedUses: allowed,
+			TTL:         *ttl,
+			AllowDHT:    *dht,
+			AllowRelay:  *relay,
+			DesktopMode: desktop.Mode(*desktopMode),
+			SelfUpdate:  *selfUpdate,
 		}
 		for _, c := range strings.Split(*cidrs, ",") {
 			c = strings.TrimSpace(c)
@@ -109,6 +111,7 @@ func main() {
 			ConsoleBinary: consoleBin,
 			Publisher:     n.ID,
 			Spec:          spec,
+			Ledger:        st,
 		})
 		if err != nil {
 			appboot.Fatal(err)
@@ -163,7 +166,8 @@ keys, passwords, or unrestricted network access.
 Commands:
   version
   build --issuer-data DIR --agent BIN --org ID --cidr CIDR --bootstrap nodeID=addr
-        [--os linux] [--arch amd64] [--desktop unattended] [--console BIN]
+        [--uses exactly-one|finite:N|unlimited] [--os linux] [--arch amd64]
+        [--desktop unattended] [--console BIN]
   verify --dir TREE
   sign-artifact --issuer-data DIR --bin BIN --version V --out FILE.rmm-artifact
 `, version)

@@ -2,27 +2,31 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 )
 
+// ErrCASConflict is returned when CompareAndSwap observes a different value.
+var ErrCASConflict = errors.New("compare-and-swap conflict")
+
 const (
 	SchemaVersion = 1
 
-	PrefixRMM     = "rmm/v1/"
-	PrefixPrivate = "rmm/v1/private/"
-	PrefixTrust   = "rmm/v1/trust/"
-	PrefixIntent  = "rmm/v1/intent/"
-	PrefixIdem    = "rmm/v1/intent-idem/"
-	PrefixReceipt = "rmm/v1/receipt/"
-	PrefixAudit   = "rmm/v1/audit/"
-	PrefixInv     = "rmm/v1/inventory/"
-	PrefixDesktop = "rmm/v1/desktop/"
-	PrefixMeta    = "rmm/v1/meta/"
-	PrefixEnroll  = "rmm/v1/enroll/"
+	PrefixRMM      = "rmm/v1/"
+	PrefixPrivate  = "rmm/v1/private/"
+	PrefixTrust    = "rmm/v1/trust/"
+	PrefixIntent   = "rmm/v1/intent/"
+	PrefixIdem     = "rmm/v1/intent-idem/"
+	PrefixReceipt  = "rmm/v1/receipt/"
+	PrefixAudit    = "rmm/v1/audit/"
+	PrefixInv      = "rmm/v1/inventory/"
+	PrefixDesktop  = "rmm/v1/desktop/"
+	PrefixMeta     = "rmm/v1/meta/"
+	PrefixEnroll   = "rmm/v1/enroll/"
 	PrefixArtifact = "rmm/v1/artifact/"
-	PrefixUpdate  = "rmm/v1/update/"
-	PrefixInterop = "interop/mgmt/v1/"
+	PrefixUpdate   = "rmm/v1/update/"
+	PrefixInterop  = "interop/mgmt/v1/"
 
 	// ForbiddenPrefix is File-Sync-Engine's on-disk prefix. RMM must never
 	// read or write it, and validation fails if it appears.
@@ -39,6 +43,9 @@ type Store interface {
 	Get(key []byte) ([]byte, bool, error)
 	Put(key, value []byte) error
 	Delete(key []byte) error
+	// CompareAndSwap stores new only if the current value equals old.
+	// A nil/empty old matches a missing key. Conflicts return ErrCASConflict.
+	CompareAndSwap(key, old, new []byte) error
 	PrefixScan(prefix []byte, fn func(key, value []byte) error) error
 	Export(w io.Writer) error
 	Import(r io.Reader) error
