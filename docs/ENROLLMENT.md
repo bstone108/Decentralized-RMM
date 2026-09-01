@@ -3,14 +3,18 @@
 Status: **binding**. Identity-provisioned installers carry an **identity-signed
 enrollment manifest**, not merely a code-signed binary.
 
+Do **not require one-time enrollment only**. Allowed-use count is configurable:
+**one**, any finite operator-defined number, or **explicitly unlimited**.
+
 ## Grant contract
 
-Each installer grant has a **unique revocable grant ID** (`grantID`). That ID
-is the revocation handle. Allowed-use is an explicit mode and value:
+Each generated installer/enrollment grant has a **unique revocable grant ID**
+(`grantID`). That ID is the operator retirement/revocation handle. Allowed-use
+is an explicit mode and value (one-time is an option, not a requirement):
 
 | Mode | Meaning |
 | --- | --- |
-| `exactly-one` | a single enrollment use |
+| `one` / `exactly-one` | a single enrollment use |
 | `finite` | any operator-defined positive count `N` |
 | `unlimited` | no use cap (still scoped, expiring, and revocable) |
 

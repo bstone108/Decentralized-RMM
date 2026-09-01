@@ -1,6 +1,7 @@
 package pack
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -45,6 +46,52 @@ func TestBuildVerifyAndRefuseSecrets(t *testing.T) {
 	}
 	if err := ScanForbidden(res.Dir, pub); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestConfigurableUsesUniqueGrantsAndNoSecrets(t *testing.T) {
+	pub, err := identity.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := enroll.Spec{
+		OrgID:          "acme",
+		AllowedCIDRs:   []string{"10.0.0.0/8"},
+		BootstrapPeers: []enroll.BootstrapPeer{{NodeID: pub.Public.NodeID, Address: "10.0.0.9:7946", Kind: "configured"}},
+	}
+	modes := []enroll.AllowedUses{
+		{Mode: enroll.UseExactlyOne, Count: 1},
+		{Mode: enroll.UseFinite, Count: 7},
+		{Mode: enroll.UseUnlimited},
+	}
+	seen := map[string]bool{}
+	for _, uses := range modes {
+		spec := base
+		spec.AllowedUses = uses
+		res, err := Build(t.TempDir(), Request{
+			GOOS: runtime.GOOS, GOARCH: runtime.GOARCH,
+			AgentBinary: []byte("fake-agent-binary"), Publisher: pub, Spec: spec,
+		})
+		if err != nil {
+			t.Fatal(uses, err)
+		}
+		if res.GrantID == "" || seen[res.GrantID] {
+			t.Fatalf("unique grant id required: %s", res.GrantID)
+		}
+		seen[res.GrantID] = true
+		if err := VerifyIndependent(res.Dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := ScanForbidden(res.Dir, pub); err != nil {
+			t.Fatal(err)
+		}
+		policy, err := os.ReadFile(res.PolicyPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(policy, []byte(uses.PolicyLine())) {
+			t.Fatalf("POLICY.txt missing %q in %s", uses.PolicyLine(), policy)
+		}
 	}
 }
 

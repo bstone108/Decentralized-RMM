@@ -251,6 +251,10 @@ func TestParseUses(t *testing.T) {
 	if err != nil || one.Mode != UseExactlyOne {
 		t.Fatal(one, err)
 	}
+	alias, err := ParseUses("one")
+	if err != nil || alias.Mode != UseExactlyOne {
+		t.Fatal(alias, err)
+	}
 	fin, err := ParseUses("finite:12")
 	if err != nil || fin.Count != 12 {
 		t.Fatal(fin, err)
@@ -261,5 +265,74 @@ func TestParseUses(t *testing.T) {
 	}
 	if _, err := ParseUses("finite:0"); err == nil {
 		t.Fatal("zero finite")
+	}
+}
+
+func TestUniqueGrantIDsPerInstaller(t *testing.T) {
+	issuer, err := identity.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := Issue(issuer, testSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Issue(issuer, testSpec())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Manifest.GrantID == "" || a.Manifest.GrantID == b.Manifest.GrantID {
+		t.Fatalf("each installer grant must have a unique revocable id: %s %s", a.Manifest.GrantID, b.Manifest.GrantID)
+	}
+	if a.Manifest.GrantID != a.Manifest.RevocationID {
+		t.Fatal("grant id is the revocation handle")
+	}
+}
+
+func TestUnlimitedStillEnforcesScopeExpiryAndRevoke(t *testing.T) {
+	issuer, err := identity.Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := testSpec()
+	spec.AllowedUses = AllowedUses{Mode: UseUnlimited}
+	spec.TTL = time.Millisecond
+	expired, err := Issue(issuer, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	st := store.NewMemory()
+	if _, err := ConsumeFor(st, trust.New(st), expired.Manifest, expired.Token, "late"); err == nil {
+		t.Fatal("unlimited grant must still expire")
+	}
+
+	spec.TTL = time.Hour
+	live, err := Issue(issuer, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := AddressAllowed(live.Manifest, "8.8.8.8:1"); err == nil {
+		t.Fatal("unlimited grant must still enforce CIDR scope")
+	}
+	st = store.NewMemory()
+	book := trust.New(st)
+	_ = book.Add(trust.Offer(issuer, "console"))
+	if _, err := ConsumeFor(st, book, live.Manifest, live.Token, "a"); err != nil {
+		t.Fatal(err)
+	}
+	notice, err := SignRevocation(issuer, live.Manifest.Grant(), ReasonRetired)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ApplyRevocation(st, book, notice); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ConsumeFor(st, book, live.Manifest, live.Token, "b"); err == nil {
+		t.Fatal("retired unlimited grant must not enroll")
+	}
+	receipts, err := ListReceipts(st, live.Manifest.Grant())
+	if err != nil || len(receipts) != 1 {
+		t.Fatalf("historic receipts must be retained after retire: %d %v", len(receipts), err)
 	}
 }

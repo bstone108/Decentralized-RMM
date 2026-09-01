@@ -84,7 +84,8 @@ func (a AllowedUses) PolicyLine() string {
 	}
 }
 
-// ParseUses accepts exactly-one, unlimited, finite:N, or a positive integer (finite).
+// ParseUses accepts one, exactly-one, unlimited, finite:N, or a positive integer.
+// One-time is an option, not a requirement.
 func ParseUses(s string) (AllowedUses, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
 	switch s {

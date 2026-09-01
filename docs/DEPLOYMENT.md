@@ -24,9 +24,12 @@ rmm-pack build \
   --bootstrap rmm1:issuer=10.0.0.9:7946 \
   --os linux --arch amd64 \
   --desktop authorization-required \
-  --uses exactly-one \
+  --uses finite:25 \
   --self-update
 ```
+
+`--uses` is required to be one of `one` / `exactly-one`, `finite:N`, or
+`unlimited`. One-time enrollment is an option, not the only allowed policy.
 
 Optional `--console` copies a separately deployable console binary into the
 same tree; it is never required to manage endpoints.

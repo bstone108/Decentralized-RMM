@@ -17,6 +17,7 @@ func TestDocsContracts(t *testing.T) {
 			"Discovery",
 			"Badger",
 			"native GUI",
+			"not one-time only",
 		},
 		"docs/THREAT_MODEL.md": {
 			"Discovery grants nothing",
@@ -58,6 +59,8 @@ func TestDocsContracts(t *testing.T) {
 			"grant ID",
 			"allowedCIDRs",
 			"never embed",
+			"not require one-time enrollment only",
+			"finite",
 		},
 		"docs/DEPLOYMENT.md": {
 			"rmm-pack",
@@ -83,6 +86,8 @@ func TestDocsContracts(t *testing.T) {
 			"native GUI",
 			"management-intent",
 			"CGO_ENABLED=0",
+			"not a requirement",
+			"revocable grant ID",
 		},
 	}
 	for rel, needles := range mustContain {

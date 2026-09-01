@@ -173,8 +173,10 @@ frame payloads.
 4. A desktop-mode change to unattended without an ephemeral admin proof fails,
    and the password never appears in the store, export, or audit log.
 5. Installers embed an identity-signed enrollment grant with a unique
-   revocable grant ID, configurable allowed-use (exactly-one, finite N, or
-   unlimited), scoped network, and no private keys.
+   revocable grant ID and configurable allowed-use (one, any finite N, or
+   unlimited — not one-time only), scoped network, and no private keys.
+   Operators can retire/revoke a grant, publish signed revocation on the mesh,
+   block future enrollment, and retain historic receipts/audit.
 6. Native GUI console prefers a local trusted agent mesh or starts built-in
    mesh, exposes authenticated mesh status, authorizes management intents
    before delivery, and refuses to apply agent intents.

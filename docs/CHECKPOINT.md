@@ -1,10 +1,10 @@
 # Foundation checkpoint
 
-Updated after the native GUI console contract: authenticated
-local-agent-preferred mesh status and a safe management-intent authorization
-workflow in a separately deployable `rmm-console` GUI (Win32 / X11 / Aqua,
-`CGO_ENABLED=0`). Dual-role stays withdrawn. Enrollment grant uses and FSE
-isolation are unchanged. Do not sign, notarize, tag, or publish releases.
+Updated after the installer enrollment-policy correction: allowed-use is
+configurable (**one**, any finite operator-defined `N`, or **explicitly
+unlimited**). One-time enrollment is an option, not a requirement. Dual-role
+stays withdrawn. The native GUI console (mesh status and management-intent
+authorization), FSE isolation, and no-release constraints are unchanged.
 
 ## Branch
 
@@ -12,18 +12,19 @@ isolation are unchanged. Do not sign, notarize, tag, or publish releases.
 
 ## Architecture change
 
-`rmm-console run` is a native GUI (not a TUI, not a mandatory web console).
-Each installer grant still has a unique revocable grant ID and configurable
-allowed-use (exactly-one, finite N, unlimited) with atomic consume, per-use
-receipts, and signed mesh revocation.
+Each generated installer/enrollment grant has a unique revocable grant ID.
+Scope, expiry, revocation, and per-use receipts/audit stay enforceable for
+every allowed-use mode. Console operators can retire/revoke a grant, publish
+the issuer-signed notice on the mesh, block future enrollment, and keep
+historic evidence. Installers never embed reusable private keys or
+unrestricted credentials.
 
 ## Proof commands
 
 ```bash
 CGO_ENABLED=0 go test ./...
-CGO_ENABLED=0 go test ./internal/consolegui ./internal/consolemesh -count=1 -v
-CGO_ENABLED=0 go test ./internal/spike ./internal/store -count=1 -v
-CGO_ENABLED=0 go test ./internal/node -run TestTwoNodeAuthenticatedIntentAck -count=1 -v
+CGO_ENABLED=0 go test ./internal/enroll ./internal/pack ./internal/node -count=1 -v -run 'Use|Grant|Revoke|Enroll|Finite|Unlimited|Atomic|ParseUses|Unique'
+CGO_ENABLED=0 go test ./internal/consolegui ./internal/consolemesh -count=1
 ```
 
 Do **not** sign, notarize, tag, or publish releases from this work.

@@ -48,7 +48,7 @@ func main() {
 		bootstrap := fs.String("bootstrap", "", "comma-separated nodeID=host:port bootstrap peers")
 		desktopMode := fs.String("desktop", string(desktop.ModeAuthorizationRequired), "unattended|authorization-required")
 		selfUpdate := fs.Bool("self-update", true, "allow secure self-update when policy permits")
-		uses := fs.String("uses", "exactly-one", "exactly-one | finite:N | unlimited")
+		uses := fs.String("uses", "exactly-one", "one|exactly-one | finite:N | unlimited (one-time is optional)")
 		ttl := fs.Duration("ttl", 24*time.Hour, "enrollment expiry")
 		dht := fs.Bool("allow-dht", false, "allow DHT candidate discovery (still not trust)")
 		relay := fs.Bool("allow-relay", false, "allow relay bootstrap peers")
@@ -166,7 +166,7 @@ keys, passwords, or unrestricted network access.
 Commands:
   version
   build --issuer-data DIR --agent BIN --org ID --cidr CIDR --bootstrap nodeID=addr
-        [--uses exactly-one|finite:N|unlimited] [--os linux] [--arch amd64]
+        [--uses one|exactly-one|finite:N|unlimited] [--os linux] [--arch amd64]
         [--desktop unattended] [--console BIN]
   verify --dir TREE
   sign-artifact --issuer-data DIR --bin BIN --version V --out FILE.rmm-artifact

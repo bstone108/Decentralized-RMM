@@ -102,9 +102,11 @@ redaction gate.
 Identity-signed enrollment is not a substitute that can be skipped in favor of
 OS code signing alone. Installers must not contain reusable private keys,
 unrestricted credentials, or unrestricted network access. Each grant has a
-unique revocable ID and an explicit allowed-use mode (exactly-one, finite N, or
-unlimited). Raw grant credentials are not stored in Badger. Revocation prevents
-future enrollments and retains historic receipts and audit.
+unique revocable ID and a configurable allowed-use count (one, any finite N,
+or explicitly unlimited — not one-time only). Raw grant credentials are not
+stored in Badger. Operator retirement/revocation is issuer-signed, published
+on the mesh, prevents future enrollments, and retains historic receipts and
+audit.
 
 ### Self-update
 
