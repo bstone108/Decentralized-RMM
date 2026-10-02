@@ -44,7 +44,7 @@ func TestDocsContracts(t *testing.T) {
 			"file/block",
 		},
 		"docs/STACK_DECISION.md": {
-			"Go 1.22",
+			"Go 1.26",
 			"BadgerDB",
 			"Windows 10",
 			"CGO_ENABLED=0",

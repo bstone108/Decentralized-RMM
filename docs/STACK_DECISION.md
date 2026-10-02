@@ -1,7 +1,7 @@
 # Stack decision
 
 Date: 2026-08-31  
-Decision: **Go 1.22 + BadgerDB v4** as the native cross-platform foundation.
+Decision: **Go 1.26 + BadgerDB v4** as the native cross-platform foundation.
 
 This is not a language-preference note. It is the smallest stack that can
 satisfy the product constraints with evidence.
@@ -16,17 +16,19 @@ satisfy the product constraints with evidence.
 - Cross-compilation from Linux CI
 - Windows 7+ only **where support is safe**
 
-## Language: Go 1.22
+## Language: Go 1.26
 
 | Option | Verdict |
 | --- | --- |
 | C# / .NET Framework 4.6.1 Windows Service | Abandoned. Not native on Linux/macOS; old skeleton is empty. |
 | C# / modern .NET | Cross-platform, but BadgerDB is a Go library; FSE concepts live in Go. Extra interop tax. |
 | Rust | Strong native story; Badger is not first-class; slower foundation spike. |
-| **Go 1.22** | **Selected.** Native binaries, Badger v4, `crypto/ecdh` X25519, easy GOOS/GOARCH matrix. |
+| **Go 1.26** | **Selected.** Native binaries, Badger v4, `crypto/ecdh` X25519, easy GOOS/GOARCH matrix. |
 
-The sandbox compiler is `go1.22.2 linux/amd64`. Module `go` version is `1.22.0`
-so CI and the sandbox match without requiring Go 1.25 (FSE's current pin).
+The sandbox compiler is `go1.26.8 linux/amd64`. Module `go` version is `1.26.0`
+with `toolchain go1.26.8`. That is the minimum language version required by
+the patched `golang.org/x/crypto` and `golang.org/x/net` modules, on the
+latest Go 1.26 patch. CI installs the same toolchain.
 
 ### Windows floor (safe support)
 
@@ -38,7 +40,8 @@ Windows 7 is not a safe support target for this toolchain. If a future fork
 must run on Windows 7, it would need a frozen Go 1.20 toolchain and is out of
 scope here.
 
-macOS: 10.15+ as implied by Go 1.22. Linux: glibc and musl via `CGO_ENABLED=0`
+macOS: 12 Monterey or later, as implied by Go 1.26 (Go 1.27 will require
+macOS 13). Linux: glibc and musl via `CGO_ENABLED=0`
 static binaries for the agent/console core.
 
 ## Store: BadgerDB v4 behind `store.Store`
@@ -102,11 +105,11 @@ It must show, on this host, with `CGO_ENABLED=0`:
 Fill in measured results after the spike run:
 
 ```
-host: linux/amd64 (Ubuntu 24.04, go1.22.2)
-go: go1.22.2
+host: linux/amd64 (Ubuntu 24.04, go1.26.8)
+go: go1.26.8
 CGO_ENABLED: 0
-badger open+1000 put+reopen: 113ms
-export size: 105025 bytes
+badger open+1000 put+reopen: 388ms
+export size: 104953 bytes
 validation: pass (rejects fse/v1/ keys and password fields)
 quarantine on corrupt MANIFEST: pass
 result: Badger selected; no material compatibility/reliability trouble on this host
