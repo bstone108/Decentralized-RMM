@@ -1,11 +1,13 @@
 module github.com/bstone108/Decentralized-RMM
 
-go 1.22.0
+go 1.26.0
+
+toolchain go1.26.8
 
 require (
 	github.com/dgraph-io/badger/v4 v4.2.0
-	golang.org/x/crypto v0.32.0
-	golang.org/x/sys v0.29.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -21,6 +23,6 @@ require (
 	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	go.opencensus.io v0.22.5 // indirect
-	golang.org/x/net v0.21.0 // indirect
-	google.golang.org/protobuf v1.28.1 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
