@@ -82,3 +82,38 @@ jobs:
           name: rmm-${{ matrix.target }}-${{ github.sha }}
           path: dist/${{ matrix.target }}/
           if-no-files-found: error
+
+  release-tooling:
+    name: Release tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+      - name: Install actionlint
+        run: |
+          set -euo pipefail
+          version="1.7.12"
+          digest="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
+          curl -sSLf -o "${RUNNER_TEMP}/${archive}" "${url}"
+          echo "${digest}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}" actionlint
+          sudo install -m 0755 "${RUNNER_TEMP}/actionlint" /usr/local/bin/actionlint
+          actionlint -version
+      - name: Lint workflows
+        run: actionlint -color
+      - name: Shellcheck release scripts
+        run: shellcheck scripts/*.sh
+      - name: Version script self-test
+        run: scripts/next-date-build-version --self-test
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.8"
+          cache: true
+      - name: Verify release archives
+        run: scripts/verify-release-layout.sh

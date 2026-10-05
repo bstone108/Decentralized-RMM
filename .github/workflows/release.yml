@@ -1,0 +1,217 @@
+# Publish a GitHub Release for an existing vYYYY.MM.DD.BB tag.
+# Tag pushes and workflow_dispatch only. Pull requests must not sign,
+# notarize, or publish. This workflow does not create the tag.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, for example v2026.10.05.01"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pushed tag
+        id: pushed
+        if: github.event_name == 'push'
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: printf 'tag=%s\n' "${REF_NAME}" >> "${GITHUB_OUTPUT}"
+
+      - name: Read dispatched tag
+        id: dispatch
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: printf 'tag=%s\n' "${INPUT_TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate tag
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_TAG: ${{ steps.pushed.outputs.tag }}
+          DISPATCH_TAG: ${{ steps.dispatch.outputs.tag }}
+        run: scripts/resolve-release-tag.sh
+
+  build:
+    name: Package ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    needs: resolve
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            goos: linux
+            goarch: amd64
+          - target: linux-arm64
+            goos: linux
+            goarch: arm64
+          - target: windows-amd64
+            goos: windows
+            goarch: amd64
+          - target: windows-arm64
+            goos: windows
+            goarch: arm64
+          - target: darwin-amd64
+            goos: darwin
+            goarch: amd64
+          - target: darwin-arm64
+            goos: darwin
+            goarch: arm64
+    env:
+      CGO_ENABLED: "0"
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.8"
+          cache: true
+
+      - name: Build ${{ matrix.target }}
+        run: |
+          scripts/build-release-binaries.sh \
+            --goos "${{ matrix.goos }}" \
+            --goarch "${{ matrix.goarch }}" \
+            --version "${VERSION}" \
+            --tag "${TAG}" \
+            --dest "dist/out"
+
+      - name: Upload release archive
+        if: matrix.goos != 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.target }}
+          path: dist/out
+          if-no-files-found: error
+
+      - name: Upload unsigned macOS binaries
+        if: matrix.goos == 'darwin'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-${{ matrix.target }}
+          path: dist/out
+          if-no-files-found: error
+
+  sign-macos:
+    name: Sign and notarize macOS
+    # macos-15 is required. Do not switch this job to macos-latest.
+    runs-on: macos-15
+    needs: [resolve, build]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+    timeout-minutes: 90
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+
+      - name: Download unsigned macOS binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "unsigned-darwin-*"
+          path: unsigned
+          merge-multiple: false
+
+      - name: Import Developer ID certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: scripts/import-apple-signing-cert.sh
+
+      - name: Sign, notarize, and zip
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          scripts/sign-notarize-macos.sh \
+            --tag "${TAG}" \
+            --arm64 unsigned/unsigned-darwin-arm64 \
+            --x86_64 unsigned/unsigned-darwin-amd64 \
+            --out dist/macos
+
+      - name: Upload notarized macOS archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-macos
+          path: dist/macos/*.zip
+          if-no-files-found: error
+
+      - name: Delete signing keychain
+        if: always()
+        run: |
+          set -euo pipefail
+          if [[ -n "${MACOS_SIGNING_KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "${MACOS_SIGNING_KEYCHAIN_PATH}" || true
+          fi
+          if [[ -n "${MACOS_SIGNING_CERTIFICATE_PATH:-}" ]]; then
+            rm -f "${MACOS_SIGNING_CERTIFICATE_PATH}"
+          fi
+          rm -f "${RUNNER_TEMP:-/tmp}/DeveloperIDG2CA.cer"
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [resolve, build, sign-macos]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Download release archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "archive-*"
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACTS_DIR: ${{ github.workspace }}/release-artifacts
+          REPO_ROOT: ${{ github.workspace }}
+        run: scripts/publish-github-release.sh
