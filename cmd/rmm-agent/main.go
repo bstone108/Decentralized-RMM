@@ -29,8 +29,9 @@ func main() {
 	case "init":
 		fs := flag.NewFlagSet("init", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -39,8 +40,9 @@ func main() {
 	case "identity":
 		fs := flag.NewFlagSet("identity", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -51,6 +53,7 @@ func main() {
 	case "pair":
 		fs := flag.NewFlagSet("pair", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		peerKey := fs.String("peer-key", "", "peer Ed25519 public key (standard base64)")
 		peerBox := fs.String("peer-box", "", "peer X25519 box public key (standard base64)")
 		peerID := fs.String("peer-id", "", "peer node id (rmm1:...)")
@@ -66,7 +69,7 @@ func main() {
 		if *peerID != "" && *peerID != pub.NodeID {
 			appboot.Fatal(fmt.Errorf("peer-id does not match key fingerprint %s", pub.NodeID))
 		}
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -78,9 +81,10 @@ func main() {
 	case "listen":
 		fs := flag.NewFlagSet("listen", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		addr := fs.String("addr", "127.0.0.1:7946", "listen address")
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -105,12 +109,13 @@ func main() {
 	case "enroll":
 		fs := flag.NewFlagSet("enroll", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		dir := fs.String("from", "", "directory with enrollment.manifest.json and enrollment.token")
 		_ = fs.Parse(os.Args[2:])
 		if *dir == "" {
 			appboot.Fatal(fmt.Errorf("--from is required"))
 		}
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -125,12 +130,13 @@ func main() {
 	case "update-ingest":
 		fs := flag.NewFlagSet("update-ingest", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		file := fs.String("file", "", "signed .rmm-artifact envelope")
 		_ = fs.Parse(os.Args[2:])
 		if *file == "" {
 			appboot.Fatal(fmt.Errorf("--file is required"))
 		}
-		st, n, err := appboot.Open(*data, node.RoleAgent)
+		st, n, err := appboot.OpenConfig(*data, node.RoleAgent, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -159,9 +165,13 @@ func usage() {
 
 The agent is separately deployable from rmm-console. It has no operator GUI.
 
+The Badger store is encrypted at rest. The key file defaults to <data>/rmm.badger.key
+(outside the store directory). Override it with --store-key-file or RMM_STORE_KEY_FILE.
+Back that file up offline. Losing it makes the store unreadable.
+
 Commands:
   version
-  init --data DIR
+  init --data DIR [--store-key-file PATH]
   identity --data DIR
   pair --data DIR --peer-key B64 [--peer-box B64]
   enroll --data DIR --from PACKDIR

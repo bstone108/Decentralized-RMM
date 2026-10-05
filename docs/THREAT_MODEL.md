@@ -114,14 +114,25 @@ A GitHub or mesh-cached artifact is untrusted until the recipient verifies the
 **publisher** signature, hash, version policy, OS/arch (on apply), and expiry.
 Paired peers cannot substitute their own signing key.
 
+### At-rest store
+
+The Badger directory is encrypted with AES-256. The master key lives outside
+that directory (`rmm.badger.key`, mode 0600, owner-only ACL on Windows), is
+never logged, and is never included in exports. An operator can point at
+another file with `--store-key-file` or `RMM_STORE_KEY_FILE`. Losing the key
+makes the store unreadable; back it up offline. Plaintext stores are migrated
+by copying into an encrypted sibling, verifying every key/value, swapping, and
+deleting the plaintext copy only after that check. A wrong or missing key does
+not quarantine or rewrite the directory. Private keys still must not leak
+through interop or export filters: `Export` is a decrypted logical backup, not
+a sealed copy of the directory.
+
 ## Non-goals for this milestone (still constrained)
 
 - Full remote-desktop capture/encode/input
 - libp2p/DHT production routing
 - Package-manager backends
 - Multi-hop onion relays
-- At-rest encryption of the whole Badger directory (follow-up; private keys
-  still must not leak through interop/export filters)
 
 ## Abuse cases the tests must cover
 

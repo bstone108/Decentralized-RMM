@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +22,16 @@ type OpenOptions struct {
 	Path           string
 	SyncWrites     bool
 	RecoverCorrupt bool
+	// KeyPath is the at-rest key file. Empty uses EnvKeyFile, then
+	// DefaultKeyPath (a sibling of the store directory, never inside it).
+	KeyPath string
+	// EncryptionKey, when set, is a 32-byte AES-256 key used for this open.
+	// It is not written to the key file and is never logged. Leave it empty
+	// in production so the key file is the source of truth.
+	EncryptionKey []byte
+	// failpoint aborts plaintext migration at a named stage ("after-copy",
+	// "corrupt-copy", "after-source-renamed"). Tests in this package set it.
+	failpoint string
 }
 
 func OpenBadger(path string) (*Badger, error) {
@@ -31,28 +42,60 @@ func OpenBadgerOptions(opt OpenOptions) (*Badger, error) {
 	if opt.Path == "" {
 		return nil, fmt.Errorf("badger path is required")
 	}
+	if err := recoverMigrationLayout(opt.Path); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(opt.Path, 0o700); err != nil {
 		return nil, err
 	}
-	opts := badger.DefaultOptions(opt.Path)
-	opts.Logger = nil
-	opts.SyncWrites = opt.SyncWrites
-	db, err := badger.Open(opts)
+	kind, err := inspectStore(opt.Path)
 	if err != nil {
+		return nil, err
+	}
+	key, err := resolveKey(opt, kind)
+	if err != nil {
+		return nil, err
+	}
+	if kind == kindPlaintext {
+		if err := migratePlaintext(opt.Path, key, opt.failpoint); err != nil {
+			if opt.RecoverCorrupt && errors.Is(err, errPlaintextUnreadable) {
+				return reopenAfterQuarantine(opt, key, err)
+			}
+			return nil, err
+		}
+	}
+	if err := discardVerifiedPlaintext(opt.Path, key); err != nil {
+		return nil, err
+	}
+	db, err := openEncryptedDB(opt.Path, key, opt.SyncWrites)
+	if err != nil {
+		if isKeyRejection(err) {
+			return nil, fmt.Errorf("%w: %s was left unchanged", ErrAtRestKeyRejected, opt.Path)
+		}
 		if !opt.RecoverCorrupt {
 			return nil, err
 		}
-		q, qerr := Quarantine(opt.Path)
-		if qerr != nil {
-			return nil, fmt.Errorf("badger open: %w (quarantine failed: %v)", err, qerr)
-		}
-		if err := os.MkdirAll(opt.Path, 0o700); err != nil {
-			return nil, fmt.Errorf("badger open after quarantine to %s: %w", q, err)
-		}
-		db, err = badger.Open(opts)
-		if err != nil {
-			return nil, fmt.Errorf("badger reopen after quarantine to %s: %w", q, err)
-		}
+		return reopenAfterQuarantine(opt, key, err)
+	}
+	st := &Badger{db: db, path: opt.Path}
+	if err := st.ensureSchema(); err != nil {
+		_ = st.Close()
+		return nil, err
+	}
+	return st, nil
+}
+
+func reopenAfterQuarantine(opt OpenOptions, key []byte, openErr error) (*Badger, error) {
+	q, qerr := Quarantine(opt.Path)
+	if qerr != nil {
+		return nil, fmt.Errorf("badger open: %w (quarantine failed: %v)", openErr, qerr)
+	}
+	if err := os.MkdirAll(opt.Path, 0o700); err != nil {
+		return nil, fmt.Errorf("badger open after quarantine to %s: %w", q, err)
+	}
+	db, err := openEncryptedDB(opt.Path, key, opt.SyncWrites)
+	if err != nil {
+		return nil, fmt.Errorf("badger reopen after quarantine to %s: %w", q, err)
 	}
 	st := &Badger{db: db, path: opt.Path}
 	if err := st.ensureSchema(); err != nil {

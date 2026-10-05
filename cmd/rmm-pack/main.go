@@ -43,6 +43,7 @@ func main() {
 		agentPath := fs.String("agent", "", "rmm-agent binary to embed")
 		consolePath := fs.String("console", "", "optional separately-deployable rmm-console binary")
 		issuerData := fs.String("issuer-data", "", "console data directory (issuer identity; private key never packed)")
+		keyFile := appboot.KeyFileFlag(fs)
 		org := fs.String("org", "", "organization id")
 		cidrs := fs.String("cidr", "", "comma-separated allowed CIDRs (required; 0.0.0.0/0 forbidden)")
 		bootstrap := fs.String("bootstrap", "", "comma-separated nodeID=host:port bootstrap peers")
@@ -67,7 +68,7 @@ func main() {
 				appboot.Fatal(err)
 			}
 		}
-		st, n, err := appboot.Open(*issuerData, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*issuerData, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -122,6 +123,7 @@ func main() {
 	case "sign-artifact":
 		fs := flag.NewFlagSet("sign-artifact", flag.ExitOnError)
 		issuerData := fs.String("issuer-data", "", "console data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		bin := fs.String("bin", "", "component binary")
 		component := fs.String("component", "rmm-agent", "rmm-agent|rmm-console|rmm-pack")
 		ver := fs.String("version", "", "semver")
@@ -137,7 +139,7 @@ func main() {
 		if err != nil {
 			appboot.Fatal(err)
 		}
-		st, n, err := appboot.Open(*issuerData, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*issuerData, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -162,6 +164,10 @@ func usage() {
 Produces platform-native installer trees with an identity-signed enrollment
 manifest (not merely code signing). Installers never embed reusable private
 keys, passwords, or unrestricted network access.
+
+The issuer Badger store is encrypted at rest. --store-key-file or
+RMM_STORE_KEY_FILE overrides <issuer-data>/rmm.badger.key. Back that key up
+offline; losing it makes the issuer store unreadable. The key is never packed.
 
 Commands:
   version

@@ -22,7 +22,7 @@ are separate native programs.
 - Console local-agent mesh reuse vs built-in mesh, with a native GUI that
   shows authenticated mesh status and authorizes management intents
 - Signed artifact cache/exchange (including other OS/arch) with independent verify
-- Namespaced local store (`rmm/v1/*`) plus a separate signed/encrypted interop schema
+- Namespaced local store (`rmm/v1/*`) encrypted at rest, plus a separate signed/encrypted interop schema
 
 Run the proof:
 

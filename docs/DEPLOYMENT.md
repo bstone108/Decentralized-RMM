@@ -46,6 +46,23 @@ Trees:
 
 The issuer private key stays in `--issuer-data`. `ScanForbidden` refuses to
 emit a tree that contains the seed, a password field, or an unrestricted CIDR.
+The issuer Badger directory is encrypted at rest. `rmm-pack` does not copy
+`rmm.badger.key` into the tree.
+
+## At-rest key
+
+`rmm-agent`, `rmm-console`, and `rmm-pack` open the store through
+`store.Store`. New stores are encrypted. The key file defaults to
+`<data>/rmm.badger.key` (next to `<data>/rmm.badger`, not inside it) with mode
+0600 and an owner-only ACL on Windows. `--store-key-file` or
+`RMM_STORE_KEY_FILE` selects another path for an unattended service.
+
+Back the key file up offline, separately from the data directory. Losing it
+makes that store permanently unreadable. A plaintext store from an older
+binary is copied into an encrypted sibling, checked key-for-key, swapped into
+place, and the plaintext copy is removed only after that check passes. A
+failed migration leaves the original readable. Details are in
+`docs/STACK_DECISION.md`.
 
 ## Agent install
 
