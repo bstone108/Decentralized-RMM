@@ -109,23 +109,21 @@ verify_buildinfo() {
   local bin_path="$1"
   local meta
   meta="$(go version -m "${bin_path}")"
-  META="${meta}" VERSION="${version}" python3 - <<'PY'
-import os
-import sys
-
-text = os.environ["META"]
-version = os.environ["VERSION"]
-needle = "-X main.version=" + version
-if needle not in text:
-    sys.exit(f"missing ldflags {needle}\n{text}")
-end = text.find(needle) + len(needle)
-if end < len(text) and text[end] not in " \n\t\"'":
-    sys.exit(f"ldflags version continues past {version!r}\n{text}")
-if "CGO_ENABLED=0" not in text:
-    sys.exit(f"CGO_ENABLED=0 missing from build info\n{text}")
-if "CGO_ENABLED=1" in text:
-    sys.exit(f"CGO_ENABLED=1 present in build info\n{text}")
-PY
+  if ! printf '%s\n' "${meta}" | grep -q 'CGO_ENABLED=0'; then
+    echo "CGO_ENABLED=0 missing from ${bin_path}" >&2
+    printf '%s\n' "${meta}" >&2
+    exit 1
+  fi
+  if printf '%s\n' "${meta}" | grep -q 'CGO_ENABLED=1'; then
+    echo "CGO_ENABLED=1 present in ${bin_path}" >&2
+    exit 1
+  fi
+  # Go 1.26 does not record -X in "go version -m". The padded version is still
+  # linked into the binary; host builds also execute the version command below.
+  if ! grep -a -F -q "${version}" "${bin_path}"; then
+    echo "${bin_path} does not contain padded version ${version}" >&2
+    exit 1
+  fi
 }
 
 for bin in "${bins[@]}"; do
