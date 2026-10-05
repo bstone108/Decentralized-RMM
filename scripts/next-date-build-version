@@ -1,0 +1,426 @@
+#!/usr/bin/env python3
+"""Print the next America/Chicago release version.
+
+Format: YYYY.MM.DD.BB, zero-padded to at least two digits for month, day, and
+build. Tags look like v2026.10.04.01 and v2026.10.05.01. The build number
+resets each Central-time calendar day and is one greater than the highest
+existing build for that day, or 01 when none exist.
+
+Existing builds come from git tags named v<date>.<build>, including a
+hyphenated prerelease suffix. Older unpadded tags such as v2026.10.5.1 count
+toward the same day. This script prints the padded version only; it does not
+create a tag.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Iterable
+from zoneinfo import ZoneInfo
+
+CHICAGO = ZoneInfo("America/Chicago")
+
+CANONICAL_RE = re.compile(
+    r"^v"
+    r"(?P<year>[0-9]{4})\."
+    r"(?P<month>0[1-9]|1[0-2])\."
+    r"(?P<day>0[1-9]|[12][0-9]|3[01])\."
+    r"(?P<build>0[1-9]|[1-9][0-9]+)"
+    r"(?P<suffix>-[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+)
+
+LOOSE_RE = re.compile(
+    r"^v"
+    r"(?P<year>[0-9]{4})\."
+    r"(?P<month>[0-9]{1,2})\."
+    r"(?P<day>[0-9]{1,2})\."
+    r"(?P<build>[0-9]+)"
+    r"(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+)
+
+PREFIX_RE = re.compile(r"^[0-9]{4}\.(0[1-9]|1[0-2])\.(0[1-9]|[12][0-9]|3[01])$")
+
+
+def chicago_now(now: datetime | None = None) -> datetime:
+    if now is None:
+        return datetime.now(CHICAGO)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=CHICAGO)
+    return now.astimezone(CHICAGO)
+
+
+def date_prefix(now: datetime | None = None) -> str:
+    stamp = chicago_now(now)
+    return f"{stamp.year:04d}.{stamp.month:02d}.{stamp.day:02d}"
+
+
+def _calendar_day(year: int, month: int, day: int) -> bool:
+    try:
+        datetime(year, month, day)
+    except ValueError:
+        return False
+    return True
+
+
+def _width_ok(raw: str, width: int) -> bool:
+    """Accept canonical zero-padding or the old unpadded form."""
+    if not raw.isdigit():
+        return False
+    if len(raw) == width:
+        return True
+    return not raw.startswith("0")
+
+
+def _build_ok(raw: str) -> bool:
+    if not raw.isdigit():
+        return False
+    if int(raw) < 1:
+        return False
+    if not raw.startswith("0"):
+        return True
+    return len(raw) == 2
+
+
+def parse_canonical_tag(value: str) -> str:
+    """Return YYYY.MM.DD.BB[-suffix] for a padded release tag."""
+    raw = value.strip()
+    if raw.startswith("refs/tags/"):
+        raw = raw[len("refs/tags/") :]
+    match = CANONICAL_RE.fullmatch(raw)
+    if not match:
+        raise ValueError(
+            "tag must look like vYYYY.MM.DD.BB with zero-padded month, day, "
+            f"and build, for example v2026.10.05.01 (got {value!r})"
+        )
+    year = int(match.group("year"))
+    month = int(match.group("month"))
+    day = int(match.group("day"))
+    if not _calendar_day(year, month, day):
+        raise ValueError(f"tag date is not a real calendar day: {value}")
+    suffix = match.group("suffix") or ""
+    return f"{year:04d}.{month:02d}.{day:02d}.{match.group('build')}{suffix}"
+
+
+def parse_loose_tag(value: str) -> tuple[str, int] | None:
+    """Return (YYYY.MM.DD, build) for a padded or legacy unpadded tag."""
+    raw = value.strip()
+    if raw.startswith("refs/tags/"):
+        raw = raw[len("refs/tags/") :]
+    match = LOOSE_RE.fullmatch(raw)
+    if not match:
+        return None
+    month_raw = match.group("month")
+    day_raw = match.group("day")
+    build_raw = match.group("build")
+    if not (_width_ok(month_raw, 2) and _width_ok(day_raw, 2) and _build_ok(build_raw)):
+        return None
+    year = int(match.group("year"))
+    month = int(month_raw)
+    day = int(day_raw)
+    build = int(build_raw)
+    if not (1 <= month <= 12 and 1 <= day <= 31 and build >= 1):
+        return None
+    if not _calendar_day(year, month, day):
+        return None
+    return f"{year:04d}.{month:02d}.{day:02d}", build
+
+
+def build_numbers_for_prefix(prefix: str, tags: Iterable[str]) -> set[int]:
+    found: set[int] = set()
+    for tag in tags:
+        parsed = parse_loose_tag(tag)
+        if parsed is None:
+            continue
+        tag_prefix, build = parsed
+        if tag_prefix == prefix and build >= 1:
+            found.add(build)
+    return found
+
+
+def format_build(number: int) -> str:
+    if number < 1:
+        raise ValueError(f"build number must be >= 1, got {number}")
+    return f"{number:02d}"
+
+
+def next_version(prefix: str, numbers: Iterable[int]) -> str:
+    values = [number for number in numbers if number >= 1]
+    nxt = (max(values) + 1) if values else 1
+    return f"{prefix}.{format_build(nxt)}"
+
+
+def validate_prefix(prefix: str) -> str:
+    if not PREFIX_RE.fullmatch(prefix):
+        raise ValueError(
+            "prefix must be zero-padded YYYY.MM.DD, for example 2026.10.05 "
+            f"(got {prefix!r})"
+        )
+    year_s, month_s, day_s = prefix.split(".")
+    if not _calendar_day(int(year_s), int(month_s), int(day_s)):
+        raise ValueError(f"prefix is not a real calendar day: {prefix}")
+    return prefix
+
+
+def _run(argv: list[str], cwd: Path) -> tuple[int, str, str]:
+    try:
+        completed = subprocess.run(
+            argv,
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return 127, "", "command not found"
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def _tag_names_from_output(blob: str) -> list[str]:
+    names: list[str] = []
+    for line in blob.splitlines():
+        line = line.strip()
+        if not line or line.endswith("^{}"):
+            continue
+        if "\t" in line:
+            line = line.split("\t", 1)[1].strip()
+        names.append(line.rsplit("/", 1)[-1])
+    return names
+
+
+def collect_tag_names(repo: Path) -> list[str]:
+    code, stdout, stderr = _run(["git", "tag", "-l"], repo)
+    if code != 0:
+        detail = stderr.strip() or stdout.strip() or f"exit {code}"
+        raise SystemExit(f"git tag -l failed: {detail}")
+    names = _tag_names_from_output(stdout)
+    remote_code, remote_url, _ = _run(["git", "remote", "get-url", "origin"], repo)
+    if remote_code != 0 or not remote_url.strip():
+        return names
+    code, stdout, stderr = _run(["git", "ls-remote", "--tags", "origin"], repo)
+    if code != 0:
+        detail = stderr.strip() or stdout.strip() or f"exit {code}"
+        print(
+            f"warning: could not list tags on origin ({detail}); using local tags only",
+            file=sys.stderr,
+        )
+        return names
+    names.extend(_tag_names_from_output(stdout))
+    return names
+
+
+def self_test() -> None:
+    october_fourth = datetime(2026, 10, 4, 12, 0, tzinfo=CHICAGO)
+    october_fifth = datetime(2026, 10, 5, 12, 0, tzinfo=CHICAGO)
+    assert date_prefix(october_fourth) == "2026.10.04", date_prefix(october_fourth)
+    assert date_prefix(october_fifth) == "2026.10.05", date_prefix(october_fifth)
+    assert date_prefix(datetime(2026, 1, 5, 9, 0, tzinfo=CHICAGO)) == "2026.01.05"
+    assert date_prefix(datetime(2026, 8, 24, 18, 0, tzinfo=CHICAGO)) == "2026.08.24"
+
+    # 2026-10-05 is still CDT (UTC-5). 04:59 UTC is 23:59 the previous day.
+    before_midnight = datetime(2026, 10, 5, 4, 59, tzinfo=ZoneInfo("UTC"))
+    after_midnight = datetime(2026, 10, 5, 5, 0, tzinfo=ZoneInfo("UTC"))
+    assert date_prefix(before_midnight) == "2026.10.04", date_prefix(before_midnight)
+    assert date_prefix(after_midnight) == "2026.10.05", date_prefix(after_midnight)
+
+    # January is CST (UTC-6).
+    jan_before = datetime(2026, 1, 5, 5, 59, tzinfo=ZoneInfo("UTC"))
+    jan_after = datetime(2026, 1, 5, 6, 0, tzinfo=ZoneInfo("UTC"))
+    assert date_prefix(jan_before) == "2026.01.04", date_prefix(jan_before)
+    assert date_prefix(jan_after) == "2026.01.05", date_prefix(jan_after)
+
+    naive = datetime(2026, 10, 5, 0, 30)
+    assert date_prefix(naive) == "2026.10.05", date_prefix(naive)
+
+    assert parse_canonical_tag("v2026.10.04.01") == "2026.10.04.01"
+    assert parse_canonical_tag("v2026.10.05.01") == "2026.10.05.01"
+    assert parse_canonical_tag("refs/tags/v2026.10.05.02") == "2026.10.05.02"
+    assert parse_canonical_tag("v2026.10.05.01-rc1") == "2026.10.05.01-rc1"
+    assert parse_canonical_tag("v2026.10.05.100") == "2026.10.05.100"
+    for invalid in (
+        "v2026.10.5.1",
+        "v2026.10.05.1",
+        "v2026.10.4.01",
+        "v2026.1.05.01",
+        "2026.10.05.01",
+        "v2026.10.05.00",
+        "v2026.10.05.001",
+        "v2026.02.31.01",
+        "v2026.13.01.01",
+        "v2026.10.05.01-",
+        "v1.2.3",
+    ):
+        try:
+            parse_canonical_tag(invalid)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected {invalid!r} to be rejected")
+
+    samples = [
+        "v2026.10.05.01",
+        "v2026.10.5.1",
+        "v2026.10.5.2",
+        "v2026.10.4.1",
+        "v2026.10.04.03",
+        "v2026.10.15.01",
+        "v2026.8.24.1",
+        "v2026.08.24.03",
+        "v2026.01.05.01",
+        "v2026.1.5.4",
+        "v2026.10.05.01-rc1",
+        "v2026.10.05.00",
+        "v2026.10.05.001",
+        "v2026.02.31.01",
+        "v1.0.0",
+        "not-a-tag",
+    ]
+    assert build_numbers_for_prefix("2026.10.05", samples) == {1, 2}
+    assert build_numbers_for_prefix("2026.10.04", samples) == {1, 3}
+    assert build_numbers_for_prefix("2026.10.15", samples) == {1}
+    assert build_numbers_for_prefix("2026.08.24", samples) == {1, 3}
+    assert build_numbers_for_prefix("2026.01.05", samples) == {1, 4}
+    assert build_numbers_for_prefix("2026.12.31", samples) == set()
+    assert next_version("2026.10.05", {1, 2}) == "2026.10.05.03"
+    assert next_version("2026.10.04", set()) == "2026.10.04.01"
+    assert next_version("2026.10.05", set()) == "2026.10.05.01"
+    assert next_version("2026.10.05", {9}) == "2026.10.05.10"
+    assert next_version("2026.10.05", {99}) == "2026.10.05.100"
+
+    _self_test_git_repo()
+    print("self-test passed")
+
+
+def _git(repo: Path, *args: str, identity: bool = False) -> None:
+    cmd = ["git", "-C", str(repo)]
+    if identity:
+        cmd.extend(
+            [
+                "-c",
+                "user.email=release-test@example.com",
+                "-c",
+                "user.name=Release Test",
+            ]
+        )
+    cmd.extend(args)
+    completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"{cmd} failed\nstdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+        )
+
+
+def _self_test_git_repo() -> None:
+    import tempfile
+
+    script = Path(__file__).resolve()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bare = root / "bare.git"
+        work = root / "work"
+        _git(root, "init", "--bare", "-b", "master", str(bare))
+        _git(root, "init", "-b", "master", str(work))
+        _git(work, "remote", "add", "origin", str(bare))
+        (work / "README.md").write_text("release test\n", encoding="utf-8")
+        _git(work, "add", "README.md")
+        _git(work, "commit", "-m", "test", identity=True)
+        tags = [
+            "v2026.10.05.01",
+            "v2026.10.5.2",
+            "v2026.10.4.1",
+            "v2026.10.04.03",
+            "v2026.10.15.01",
+            "v2026.8.24.1",
+            "v2026.08.24.03",
+            "v2026.01.05.01",
+            "v2026.1.5.4",
+            "v2026.10.05.01-rc1",
+        ]
+        for tag in tags:
+            _git(work, "tag", tag)
+            _git(work, "push", "origin", f"refs/tags/{tag}")
+        # This build number must be discovered from origin, not the local clone.
+        _git(work, "tag", "-d", "v2026.10.5.2")
+
+        def run_script(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, str(script), *args],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        got = run_script("--repo", str(work), "--prefix", "2026.10.05")
+        if got.returncode != 0 or got.stdout != "2026.10.05.03\n":
+            raise AssertionError(
+                f"next version from tags\nstdout={got.stdout!r}\nstderr={got.stderr!r}"
+            )
+        october_fourth = run_script("--repo", str(work), "--prefix", "2026.10.04")
+        if october_fourth.returncode != 0 or october_fourth.stdout != "2026.10.04.04\n":
+            raise AssertionError(
+                "october 4 next version\n"
+                f"stdout={october_fourth.stdout!r}\nstderr={october_fourth.stderr!r}"
+            )
+        empty = run_script("--repo", str(work), "--prefix", "2026.12.31")
+        if empty.returncode != 0 or empty.stdout != "2026.12.31.01\n":
+            raise AssertionError(
+                f"empty day\nstdout={empty.stdout!r}\nstderr={empty.stderr!r}"
+            )
+        rejected = run_script("--from-tag", "v2026.10.5.1")
+        if rejected.returncode == 0:
+            raise AssertionError("unpadded --from-tag was accepted")
+        accepted = run_script("--from-tag", "v2026.10.05.01")
+        if accepted.returncode != 0 or accepted.stdout != "2026.10.05.01\n":
+            raise AssertionError(
+                f"--from-tag\nstdout={accepted.stdout!r}\nstderr={accepted.stderr!r}"
+            )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in checks and print nothing but the result.",
+    )
+    parser.add_argument(
+        "--from-tag",
+        metavar="TAG",
+        help="Print the padded version embedded for this existing tag. Does not increment.",
+    )
+    parser.add_argument(
+        "--prefix",
+        help="Override the America/Chicago day as zero-padded YYYY.MM.DD (testing).",
+    )
+    parser.add_argument(
+        "--repo",
+        default=".",
+        help="Git repository whose tags are scanned. Default: current directory.",
+    )
+    args = parser.parse_args(argv)
+    if args.self_test:
+        self_test()
+        return 0
+    if args.from_tag:
+        try:
+            print(parse_canonical_tag(args.from_tag))
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        return 0
+    try:
+        prefix = validate_prefix(args.prefix) if args.prefix else date_prefix()
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    repo = Path(args.repo)
+    numbers = build_numbers_for_prefix(prefix, collect_tag_names(repo))
+    print(next_version(prefix, numbers))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

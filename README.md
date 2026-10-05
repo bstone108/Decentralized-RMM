@@ -65,4 +65,19 @@ See `docs/INTEROP.md`.
 - macOS
 - Windows 10+ / Windows Server 2016+ (safe current-Go floor; see `docs/STACK_DECISION.md`)
 
-Do not sign, notarize, tag, or publish releases from this foundation work.
+## Releases
+
+`.github/workflows/release.yml` publishes a GitHub Release when a `v*` tag is pushed, and when the workflow is run manually with that existing tag. Signing, notarization, and publishing run on those events only.
+
+Versions are `YYYY.MM.DD.BB` in America/Chicago. Month, day, and build are zero-padded to at least two digits: `v2026.10.04.01`, `v2026.10.05.01`.
+
+```bash
+version="$(scripts/next-date-build-version)"
+# Optional: commit docs/release-notes/v${version}.md on this commit first.
+git tag "v${version}"
+git push origin "v${version}"
+```
+
+`scripts/next-date-build-version` reads existing `v<date>.*` tags for today in America/Chicago, including older unpadded tags such as `v2026.10.5.1`, and prints the next padded version. The workflow embeds that value with `-ldflags` (`-X main.version=YYYY.MM.DD.BB`). The release title is `v<version>`. A hyphen in the tag marks a prerelease. Notes come from `docs/release-notes/<tag>.md` on the tagged commit; otherwise GitHub generates them. The workflow does not create the tag.
+
+Release assets are `rmm-<tag>-linux-amd64.tar.gz`, `rmm-<tag>-linux-arm64.tar.gz`, `rmm-<tag>-windows-amd64.zip`, `rmm-<tag>-windows-arm64.zip`, `rmm-<tag>-macos-arm64.zip`, `rmm-<tag>-macos-x86_64.zip`, `rmm-<tag>-macos-universal.zip`, and `SHA256SUMS`. Each archive contains the deployable binaries plus `README.md`, `SECURITY.md`, and `docs/DEPLOYMENT.md` (including at-rest key backup). macOS archives are Developer ID signed and notarized.
