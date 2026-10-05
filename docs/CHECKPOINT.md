@@ -1,5 +1,10 @@
 # Foundation checkpoint
 
+The local Badger store used by the agent, console, and packager is encrypted
+at rest. The key file lives outside the store directory; losing it makes the
+store unreadable. Plaintext directories migrate only after a full key/value
+check, and the plaintext copy is removed once that check passes.
+
 Updated after the installer enrollment-policy correction: allowed-use is
 configurable (**one**, any finite operator-defined `N`, or **explicitly
 unlimited**). One-time enrollment is an option, not a requirement. Dual-role

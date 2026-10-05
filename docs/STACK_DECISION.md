@@ -61,6 +61,45 @@ key-prefixed store.
 RMM prefixes: `rmm/v1/` and `interop/mgmt/v1/`. FSE uses `fse/v1/`. Those
 keyspaces must never be mixed in one database file.
 
+### At-rest encryption
+
+New stores are encrypted with Badger's built-in AES-256 (`EncryptionKey` of
+32 bytes) and a 64 MiB index cache. Encryption requires a block cache; the
+Badger default (256 MiB) is left in place so decrypted blocks are not re-read
+from disk on every lookup. This works with `CGO_ENABLED=0` on Linux, Windows,
+and macOS. The logical `Export` stream stays a decrypted backup and is still
+rejected when it contains `fse/v1/` keys or password fields. The at-rest key
+is not part of that stream.
+
+**Key file.** On first open of a new or still-plaintext store, the process
+generates a random 32-byte key and writes `rmm-badger-key-v1` plus standard
+base64 to a sibling of the store directory: `<data>/rmm.badger.key` next to
+`<data>/rmm.badger`. The file mode is `0600`. On Windows the DACL is replaced
+with an owner-only ACE that does not inherit broader permissions from the
+parent. The key is never logged and never written into the Badger directory,
+so a copy of `rmm.badger` is not enough to read the data.
+
+**Override.** `--store-key-file PATH` on `rmm-agent`, `rmm-console`, and
+`rmm-pack` wins. Otherwise `RMM_STORE_KEY_FILE` is used when set. An empty
+override keeps the sibling default.
+
+**Backup.** Copy the key file offline, separately from the data directory, and
+treat it like the node identity. Restoring a machine needs both the store
+directory and that key (via the default path, the env var, or the flag).
+Badger rotates internal data keys under this same master key; operators do
+not manage those. **Losing the master key makes the store permanently
+unreadable.** There is no escrow and no password recovery.
+
+**Existing plaintext stores** are migrated in place on the next open:
+
+1. The original directory is only opened read-only.
+2. Entries are streamed into a sibling `rmm.badger.enc-new` encrypted with the key.
+3. Every user-visible key/value (all versions, count plus SHA-256) is compared.
+4. Only after that match is the original renamed to `rmm.badger.plaintext-backup` and the encrypted directory renamed into place. A crash between those renames is finished on the next open.
+5. The encrypted store is opened again and the checksum is compared to the plaintext backup. **The plaintext copy is then deleted.** It is not kept: leaving it on disk would undo at-rest encryption. Deletion is a normal recursive remove, not a multi-pass wipe.
+
+A verification failure deletes the partial encrypted sibling immediately. A crash during the copy leaves that sibling; the next open discards it and starts again. In both cases the original plaintext directory stays where it was and remains readable. A checksum mismatch after the swap leaves both directories on disk and refuses to start, so the original is not destroyed. A wrong or missing key on an already encrypted store returns a clear error and does not quarantine or rewrite the directory. Corrupt opens that are not key mismatches still quarantine the directory, as before. The key file lives outside the store, so quarantine does not take it.
+
 ## Crypto and transport
 
 - Identity: Ed25519 (`crypto/ed25519`)

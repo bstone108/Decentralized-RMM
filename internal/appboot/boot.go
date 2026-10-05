@@ -1,6 +1,7 @@
 package appboot
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,8 +15,24 @@ func DefaultDataDir() string {
 	return filepath.Join(home, ".rmm")
 }
 
+// KeyFileFlag is the operator override for the Badger at-rest key.
+// An empty value keeps the default (sibling of the store directory, or
+// RMM_STORE_KEY_FILE when that environment variable is set).
+func KeyFileFlag(fs *flag.FlagSet) *string {
+	return fs.String("store-key-file", "", "Badger at-rest key file (default: <data>/rmm.badger.key; env RMM_STORE_KEY_FILE)")
+}
+
 func Open(data string, role node.Role) (store.Store, *node.Node, error) {
-	st, err := store.OpenBadger(store.DataDir(data))
+	return OpenConfig(data, role, "")
+}
+
+func OpenConfig(data string, role node.Role, keyFile string) (store.Store, *node.Node, error) {
+	st, err := store.OpenBadgerOptions(store.OpenOptions{
+		Path:           store.DataDir(data),
+		SyncWrites:     true,
+		RecoverCorrupt: true,
+		KeyPath:        keyFile,
+	})
 	if err != nil {
 		return nil, nil, err
 	}

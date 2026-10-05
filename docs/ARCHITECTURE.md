@@ -108,8 +108,12 @@ Key namespaces (separate from File-Sync-Engine's `fse/v1/`):
 
 Raw Badger directories, SST files, and WAL files are **never** shared with
 File-Sync-Engine. Backup/export is an RMM-owned stream. Validation walks keys
-and known record schemas. Corrupt opens quarantine the directory and recover
-from backup or empty+audit, never by merging another product's files.
+and known record schemas and still rejects `fse/v1/` keys and password fields.
+The store is encrypted at rest (Badger AES-256). The key file sits beside the
+store directory, not inside it, and is omitted from exports. Corrupt opens
+that are not key mismatches quarantine the directory and recover from backup
+or empty+audit, never by merging another product's files. A wrong or missing
+at-rest key leaves the directory unchanged. See `docs/STACK_DECISION.md`.
 
 ## Intent plane
 

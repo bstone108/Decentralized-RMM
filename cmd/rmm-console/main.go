@@ -34,8 +34,9 @@ func main() {
 	case "init":
 		fs := flag.NewFlagSet("init", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -44,8 +45,9 @@ func main() {
 	case "identity":
 		fs := flag.NewFlagSet("identity", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -56,6 +58,7 @@ func main() {
 	case "pair":
 		fs := flag.NewFlagSet("pair", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		peerKey := fs.String("peer-key", "", "peer Ed25519 public key (standard base64)")
 		peerBox := fs.String("peer-box", "", "peer X25519 box public key (standard base64)")
 		peerID := fs.String("peer-id", "", "peer node id (rmm1:...)")
@@ -71,7 +74,7 @@ func main() {
 		if *peerID != "" && *peerID != pub.NodeID {
 			appboot.Fatal(fmt.Errorf("peer-id does not match key fingerprint %s", pub.NodeID))
 		}
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -83,10 +86,11 @@ func main() {
 	case "run":
 		fs := flag.NewFlagSet("run", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		addr := fs.String("addr", "127.0.0.1:7947", "builtin mesh listen if no local agent")
 		agentData := fs.String("agent-data", "", "same-host agent data dir (default: --data)")
 		_ = fs.Parse(os.Args[2:])
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -147,6 +151,7 @@ func main() {
 	case "intent":
 		fs := flag.NewFlagSet("intent", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		addr := fs.String("addr", "", "agent address host:port")
 		target := fs.String("target", "", "target node id")
 		kind := fs.String("kind", "inventory.collect", "intent kind")
@@ -155,7 +160,7 @@ func main() {
 		if *addr == "" || *target == "" {
 			appboot.Fatal(fmt.Errorf("--addr and --target are required"))
 		}
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -185,6 +190,7 @@ func main() {
 	case "revoke":
 		fs := flag.NewFlagSet("revoke", flag.ExitOnError)
 		data := fs.String("data", appboot.DefaultDataDir(), "data directory")
+		keyFile := appboot.KeyFileFlag(fs)
 		grant := fs.String("grant", "", "unique grant ID")
 		reason := fs.String("reason", enroll.ReasonRevoked, "revoked|retired")
 		addr := fs.String("addr", "", "optional trusted peer to publish the signed revocation")
@@ -193,7 +199,7 @@ func main() {
 		if *grant == "" {
 			appboot.Fatal(fmt.Errorf("--grant is required"))
 		}
-		st, n, err := appboot.Open(*data, node.RoleConsole)
+		st, n, err := appboot.OpenConfig(*data, node.RoleConsole, *keyFile)
 		if err != nil {
 			appboot.Fatal(err)
 		}
@@ -239,9 +245,13 @@ This process has no endpoint-management agent function, no TUI, and is not a
 mandatory web console. "run" is the native GUI. "policy" / "intent" remain
 auxiliary CLI for enrollment visibility and scripted delivery.
 
+The Badger store is encrypted at rest. The key file defaults to <data>/rmm.badger.key
+(outside the store directory). Override it with --store-key-file or RMM_STORE_KEY_FILE.
+Back that file up offline. Losing it makes the store unreadable.
+
 Commands:
   version
-  init --data DIR
+  init --data DIR [--store-key-file PATH]
   identity --data DIR
   pair --data DIR --peer-key B64
   run --data DIR [--agent-data DIR] [--addr 127.0.0.1:7947]

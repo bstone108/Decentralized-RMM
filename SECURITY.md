@@ -21,6 +21,10 @@ Non-negotiable reminders:
 - Admin/root passwords used for remote unattended enablement are ephemeral
   only: never persist, log, or replicate.
 - Do not share raw Badger files with File-Sync-Engine.
+- The Badger store is encrypted at rest. The key file (`rmm.badger.key`, or
+  `--store-key-file` / `RMM_STORE_KEY_FILE`) is mode 0600, lives outside the
+  store directory, is never logged, and is never part of an export. Back it
+  up offline. Losing it makes the store unreadable. See `docs/STACK_DECISION.md`.
 - `command.run` fails closed in this foundation.
 - Installers never embed reusable private keys, unrestricted credentials, or
   unrestricted network access.
