@@ -2,7 +2,7 @@ module github.com/bstone108/Decentralized-RMM
 
 go 1.26.0
 
-toolchain go1.26.8
+toolchain go1.26.10
 
 require (
 	github.com/dgraph-io/badger/v4 v4.2.0
@@ -23,6 +23,6 @@ require (
 	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	go.opencensus.io v0.22.5 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
